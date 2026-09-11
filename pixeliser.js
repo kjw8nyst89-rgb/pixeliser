@@ -537,7 +537,8 @@ async function decompressLZFSE(
             outputPath
         );
     }
-    catch (e){
+    catch (e)
+    {
     }
 
 
@@ -643,7 +644,8 @@ async function decompressLZFSE(
             outputPath
         );
     }
-    catch (e)
+    catch (e) 
+    {
     }
 
 
