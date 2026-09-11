@@ -63,49 +63,30 @@ let lzfseReady = false;
    Initialisation LZFSE
    -------------------------------------------------- */
 
+let lzfseModule = null;
+
 async function initializeLZFSE() {
+    console.log("Chargement du module LZFSE...");
+
     try {
+        const module = await createLZFSEModule();
 
-        console.log(
-            "Chargement du module LZFSE..."
-        );
+        console.log("Module LZFSE créé :", module);
+        console.log("malloc :", module._malloc);
+        console.log("free :", module._free);
+        console.log("decode :", module._decode_lzfse);
+        console.log("HEAPU8 :", module.HEAPU8);
+        console.log("HEAP8 :", module.HEAP8);
+        console.log("wasmMemory :", module.wasmMemory);
 
+        lzfseModule = module;
 
-        lzfseModule =
-            await createLZFSEModule();
-      console.log("LZFSE prêt");
-console.log("Module :", lzfseModule);
-console.log("HEAPU8 :", lzfseModule.HEAPU8);
-console.log("malloc :", lzfseModule._malloc);
-console.log("free :", lzfseModule._free);
-console.log("decode :", lzfseModule._decode_lzfse);
-
-        lzfseReady = true;
-
-
-        console.log(
-            "LZFSE prêt"
-        );
-
-
-        info.textContent =
-            "LZFSE prêt";
-
-
+        console.log("LZFSE prêt");
     }
     catch (error) {
-
-        console.error(
-            "Erreur chargement LZFSE :",
-            error
-        );
-
-
-        info.textContent =
-            "Erreur LZFSE";
-
+        console.error("ERREUR INITIALISATION LZFSE :", error);
+        throw error;
     }
-
 }
 
 
