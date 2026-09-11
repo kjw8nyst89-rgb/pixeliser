@@ -28,9 +28,11 @@
     <div id="toolbar">
 
         <button id="openButton">
-            Ouvrir une image
+            Ouvrir une image 
         </button>
-
+        <button id="openGrilleButton">
+            Ouvrir une grille
+        </button>
         <button id="clearButton">
             Effacer
         </button>
@@ -57,7 +59,10 @@
            type="file"
            accept="image/*"
            hidden>
-
+    <input id="grilleInput"
+       type="file"
+       accept=".grille,application/octet-stream"
+       hidden>
 
     <!-- Zone de travail -->
 
