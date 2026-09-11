@@ -25,6 +25,8 @@
 
 <body>
 
+    <!-- Barre d'outils -->
+
     <div id="toolbar">
 
         <button id="openButton">
@@ -77,18 +79,27 @@
     </div>
 
 
+    <!-- Zone de travail -->
+
     <div id="workspace">
 
-        <canvas id="canvas"></canvas>
+        <canvas
+            id="canvas"
+            width="1"
+            height="1"
+        ></canvas>
 
     </div>
 
 
-    <!-- Module LZFSE -->
+    <!--
+        Le module JavaScript est chargé après le DOM.
+        Il peut donc récupérer immédiatement #canvas.
+    -->
 
     <script
         type="module"
-        src="pixeliser.js"
+        src="./pixeliser.js"
     ></script>
 
 </body>
