@@ -78,7 +78,7 @@ async function initializeLZFSE() {
         console.log("HEAPU8 :", module.HEAPU8);
         console.log("HEAP8 :", module.HEAP8);
         console.log("wasmMemory :", module.wasmMemory);
-       console.log( "decode_lzfse_file :", lzfseModule._decode_lzfse_file);
+        console.log( "decode_lzfse_file :", lzfseModule._decode_lzfse_file);
 
         lzfseModule = module;
 
