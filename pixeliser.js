@@ -53,6 +53,18 @@ async function initializeLZFSE() {
 
         lzfseModule = module;
 
+        lzfseModule.decodeLZFSEFile =
+    lzfseModule.cwrap(
+        "decode_lzfse_file",
+        "number",
+        ["string", "string", "number"]
+    );
+
+console.log(
+    "decodeLZFSEFile :",
+    lzfseModule.decodeLZFSEFile
+);
+
         console.log("LZFSE prêt");
 
     }
@@ -1046,12 +1058,11 @@ async function loadGrilleFile(file) {
 
 
     const decodedSize =
-        lzfseModule._decode_lzfse_file(
-            inputPath,
-            outputPath,
-            originalSize
-        );
-
+    lzfseModule.decodeLZFSEFile(
+        inputPath,
+        outputPath,
+        originalSize
+    );
 
     console.log(
         "Taille décompressée :",
