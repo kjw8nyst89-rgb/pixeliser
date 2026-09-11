@@ -323,26 +323,23 @@ grilleInput.addEventListener(
    LECTURE DU FICHIER .GRILLE
    ================================================== */
 
-async function loadGrilleFile(
-    file
-) {
+async function loadGrilleFile(file) {
 
-    if (!lzfseReady) {
+    console.log("===============================");
+    console.log("LECTURE FICHIER GRILLE");
+    console.log("Nom :", file.name);
+    console.log("Taille :", file.size);
+    console.log("===============================");
 
-        throw new Error(
-            "Le module LZFSE n'est pas prêt"
-        );
-
+    if (!lzfseModule) {
+        throw new Error("Module LZFSE non chargé");
     }
 
+    // ---------------------------------------------------------
+    // Lecture du fichier
+    // ---------------------------------------------------------
 
-    /*
-     * Lecture complète du fichier.
-     */
-
-    const buffer =
-        await file.arrayBuffer();
-
+    const buffer = await file.arrayBuffer();
 
     console.log(
         "Buffer reçu :",
@@ -350,37 +347,21 @@ async function loadGrilleFile(
         "octets"
     );
 
-
     if (buffer.byteLength < 8) {
-
-        throw new Error(
-            "Fichier trop petit"
-        );
-
+        throw new Error("Fichier .grille trop petit");
     }
 
 
-    /*
-     * Les 8 premiers octets contiennent
-     * la taille de l'archive originale.
-     *
-     * Format little endian.
-     */
+    // ---------------------------------------------------------
+    // Les 8 premiers octets = taille originale
+    // uint64 little endian
+    // ---------------------------------------------------------
 
-    const headerView =
-        new DataView(
-            buffer,
-            0,
-            8
-        );
+    const view = new DataView(buffer);
 
+    const originalSizeBig = view.getBigUint64(0, true);
 
-    const originalSize =
-        readUInt64LE(
-            headerView,
-            0
-        );
-
+    const originalSize = Number(originalSizeBig);
 
     console.log(
         "Taille originale annoncée :",
@@ -388,123 +369,131 @@ async function loadGrilleFile(
     );
 
 
-    /*
-     * Les données LZFSE commencent
-     * à l'offset 8.
-     */
+    // ---------------------------------------------------------
+    // Données LZFSE
+    // ---------------------------------------------------------
 
-    const compressed =
-        new Uint8Array(
-            buffer,
-            8
-        );
+    const compressedOffset = 8;
 
+    const compressedSize =
+        buffer.byteLength - compressedOffset;
 
     console.log(
         "Taille LZFSE :",
-        compressed.byteLength
+        compressedSize
     );
 
 
-    /*
-     * Vérification de la signature.
-     *
-     * Ton fichier réel doit commencer
-     * par "bvx2".
-     */
+    const compressed = new Uint8Array(
+        buffer,
+        compressedOffset,
+        compressedSize
+    );
 
-    const magic =
-        String.fromCharCode(
+
+    // ---------------------------------------------------------
+    // Vérification signature LZFSE
+    // ---------------------------------------------------------
+
+    if (compressedSize >= 4) {
+
+        const magic = String.fromCharCode(
             compressed[0],
             compressed[1],
             compressed[2],
             compressed[3]
         );
 
-
-    console.log(
-        "Signature LZFSE :",
-        magic
-    );
-
-
-    if (
-        magic !== "bvx2" &&
-        magic !== "bvx1" &&
-        magic !== "bvxn" &&
-        magic !== "bvx-"
-    ) {
-
-        throw new Error(
-            "Signature LZFSE inconnue : " +
+        console.log(
+            "Signature LZFSE :",
             magic
         );
-
     }
 
 
-    /*
-     * Allocation du buffer de sortie
-     * dans la mémoire WASM.
-     */
+    // ---------------------------------------------------------
+    // Vérifications
+    // ---------------------------------------------------------
+
+    if (originalSize <= 0) {
+        throw new Error(
+            "Taille originale invalide : " + originalSize
+        );
+    }
+
+    if (originalSize > 1024 * 1024 * 1024) {
+        throw new Error(
+            "Taille originale trop importante : " +
+            originalSize
+        );
+    }
+
+
+    // ---------------------------------------------------------
+    // Allocation mémoire WASM
+    // ---------------------------------------------------------
 
     const srcPtr =
-        lzfseModule._malloc(
-            compressed.byteLength
+        lzfseModule._malloc(compressedSize);
+
+    if (!srcPtr) {
+        throw new Error(
+            "Impossible d'allouer " +
+            compressedSize +
+            " octets pour la source LZFSE"
         );
+    }
 
 
     const dstPtr =
-        lzfseModule._malloc(
-            originalSize
+        lzfseModule._malloc(originalSize);
+
+    if (!dstPtr) {
+
+        lzfseModule._free(srcPtr);
+
+        throw new Error(
+            "Impossible d'allouer " +
+            originalSize +
+            " octets pour la destination"
         );
+    }
+
+
+    console.log(
+        "Mémoire WASM allouée :",
+        "src =", srcPtr,
+        "dst =", dstPtr
+    );
 
 
     try {
 
-        /*
-         * Copie du fichier compressé
-         * dans la mémoire WASM.
-         */
+        // -----------------------------------------------------
+        // Copier le fichier JS -> mémoire WASM
+        // -----------------------------------------------------
 
-        lzfseModule.HEAPU8.set(
+        console.log("Copie du buffer compressé vers WASM...");
+
+        lzfseModule._copy_to_wasm(
+            srcPtr,
             compressed,
-            srcPtr
+            compressedSize
         );
 
 
-        console.log(
-            "Décompression LZFSE..."
-        );
+        // -----------------------------------------------------
+        // Décompression
+        // -----------------------------------------------------
 
-
-        /*
-         * Appel C :
-         *
-         * decode_lzfse(
-         *     src,
-         *     srcSize,
-         *     dst,
-         *     dstSize
-         * )
-         */
+        console.log("Décompression LZFSE...");
 
         const decodedSize =
-            lzfseModule.ccall(
-                "decode_lzfse",
-                "number",
-                [
-                    "number",
-                    "number",
-                    "number",
-                    "number"
-                ],
-                [
-                    srcPtr,
-                    compressed.byteLength,
-                    dstPtr,
-                    originalSize
-                ]
+            lzfseModule._decode_lzfse(
+                srcPtr,
+                compressedSize,
+                dstPtr,
+                originalSize
             );
 
 
@@ -514,72 +503,116 @@ async function loadGrilleFile(
         );
 
 
-        if (decodedSize <= 0) {
+        if (!decodedSize || decodedSize <= 0) {
 
             throw new Error(
-                "Échec décompression LZFSE"
+                "Échec de la décompression LZFSE"
             );
-
         }
 
 
-        /*
-         * Copie du résultat hors
-         * de la mémoire WASM.
-         */
+        // -----------------------------------------------------
+        // Récupération du buffer décompressé
+        // -----------------------------------------------------
+        //
+        // Pour l'instant on récupère la mémoire WASM par
+        // l'intermédiaire de HEAPU8.
+        //
+        // Si HEAPU8 n'est toujours pas exposé, on utilisera
+        // copy_from_wasm avec un buffer WASM alloué pour cela.
+        // -----------------------------------------------------
 
-        const decompressed =
-            new Uint8Array(
-                decodedSize
+        if (!lzfseModule.HEAPU8) {
+
+            console.log(
+                "HEAPU8 non exposé : récupération par copie..."
             );
 
+            /*
+             * On va créer un buffer temporaire dans WASM
+             * contenant la destination, puis le copier.
+             *
+             * Cette partie sera remplacée ci-dessous par
+             * l'exposition directe de la mémoire si nécessaire.
+             */
+        }
 
-        decompressed.set(
-            lzfseModule.HEAPU8.subarray(
+
+        // -----------------------------------------------------
+        // VERSION ACTUELLE :
+        // Emscripten peut exposer HEAPU8 via wasmMemory.
+        // -----------------------------------------------------
+
+        let decoded;
+
+        if (lzfseModule.HEAPU8) {
+
+            decoded = new Uint8Array(
+                lzfseModule.HEAPU8.buffer,
                 dstPtr,
-                dstPtr +
                 decodedSize
-            )
-        );
+            ).slice();
+
+        } else {
+
+            throw new Error(
+                "HEAPU8 n'est pas exposé par le module LZFSE. " +
+                "Le wrapper doit exposer une fonction de copie."
+            );
+        }
 
 
         console.log(
-            "Décompression terminée"
+            "Buffer décompressé récupéré :",
+            decoded.length,
+            "octets"
         );
 
 
-        /*
-         * Pour l'instant :
-         *
-         * on inspecte seulement
-         * l'archive résultante.
-         */
+        // -----------------------------------------------------
+        // Inspection des premiers octets
+        // -----------------------------------------------------
 
-        inspectArchive(
-            decompressed
+        let hex = "";
+
+        const count = Math.min(
+            32,
+            decoded.length
+        );
+
+        for (let i = 0; i < count; i++) {
+
+            hex +=
+                decoded[i]
+                    .toString(16)
+                    .padStart(2, "0") +
+                " ";
+        }
+
+        console.log(
+            "Premiers octets décompressés :",
+            hex
         );
 
 
-        info.textContent =
-            `LZFSE OK — ${decodedSize.toLocaleString(
-                "fr-FR"
-            )} octets`;
+        // -----------------------------------------------------
+        // Pour la suite :
+        //
+        // decoded contient maintenant le NSKeyedArchiver.
+        // -----------------------------------------------------
 
+        return decoded;
 
     }
     finally {
 
-        lzfseModule._free(
-            srcPtr
+        console.log(
+            "Libération mémoire WASM..."
         );
 
-
-        lzfseModule._free(
-            dstPtr
-        );
-
+        lzfseModule._free(srcPtr);
+        lzfseModule._free(dstPtr);
     }
-
 }
 
 
