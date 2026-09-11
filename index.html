@@ -5,46 +5,84 @@
 
     <meta charset="UTF-8">
 
-    <meta name="viewport"
-          content="width=device-width,
-                   initial-scale=1,
-                   maximum-scale=1,
-                   user-scalable=no">
-
-    <meta name="theme-color" content="#ffffff">
+    <meta
+        name="viewport"
+        content="width=device-width,
+                 initial-scale=1.0,
+                 maximum-scale=1.0,
+                 user-scalable=no"
+    >
 
     <title>Pixeliser</title>
 
-    <link rel="stylesheet" href="pixeliser.css">
+    <link
+        rel="stylesheet"
+        href="pixeliser.css"
+    >
 
 </head>
 
+
 <body>
 
-<div id="app">
-
-    <!-- Barre d'outils -->
+    <!-- ==================================================
+         BARRE D'OUTILS
+         ================================================== -->
 
     <div id="toolbar">
 
+        <!-- Ouvrir une image -->
+
         <button id="openButton">
-            Ouvrir une image 
+            Ouvrir une image
         </button>
+
+        <input
+            id="imageInput"
+            type="file"
+            accept="image/*"
+            hidden
+        >
+
+
+        <!-- Ouvrir une grille -->
+
         <button id="openGrilleButton">
             Ouvrir une grille
         </button>
+
+        <input
+            id="grilleInput"
+            type="file"
+            accept=".grille,application/octet-stream"
+            hidden
+        >
+
+
+        <!-- Effacer -->
+
         <button id="clearButton">
             Effacer
         </button>
 
-        <label class="tileControl">
+
+        <!-- Taille des cases -->
+
+        <label for="tileSize">
             Taille :
-            <input id="tileSize"
-                   type="number"
-                   min="2"
-                   max="100"
-                   value="20">
         </label>
+
+        <input
+            id="tileSize"
+            type="number"
+            min="2"
+            max="100"
+            value="20"
+            inputmode="numeric"
+        >
+
+
+        <!-- Informations -->
 
         <span id="info">
             Aucune image
@@ -53,18 +91,9 @@
     </div>
 
 
-    <!-- Input fichier invisible -->
-
-    <input id="imageInput"
-           type="file"
-           accept="image/*"
-           hidden>
-    <input id="grilleInput"
-       type="file"
-       accept=".grille,application/octet-stream"
-       hidden>
-
-    <!-- Zone de travail -->
+    <!-- ==================================================
+         ZONE DE TRAVAIL
+         ================================================== -->
 
     <div id="workspace">
 
@@ -72,10 +101,15 @@
 
     </div>
 
-</div>
 
+    <!-- ==================================================
+         JAVASCRIPT
+         ================================================== -->
 
-<script src="pixeliser.js"></script>
+    <script
+        src="pixeliser.js"
+    ></script>
 
 </body>
+
 </html>
