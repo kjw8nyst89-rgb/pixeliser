@@ -22,6 +22,7 @@ let selectedTiles = new Set();
 let zoomFactor = 1.0;
 
 let lastTouchDistance = null;
+
 let touchStartX = 0;
 let touchStartY = 0;
 
@@ -32,12 +33,12 @@ let isDragging = false;
 // INITIALISATION LZFSE
 // ============================================================
 
-async function initializeLZFSE() {
-
+async function initializeLZFSE()
+{
     console.log("Chargement du module LZFSE...");
 
-    try {
-
+    try
+    {
         const module =
             await createLZFSEModule();
 
@@ -46,30 +47,53 @@ async function initializeLZFSE() {
             module
         );
 
+
         console.log(
-            "decode_lzfse_file :",
-            module._decode_lzfse_file
+            "lzfse_malloc :",
+            typeof module._lzfse_malloc
         );
+
+        console.log(
+            "lzfse_free :",
+            typeof module._lzfse_free
+        );
+
+        console.log(
+            "lzfse_copy_to_wasm :",
+            typeof module._lzfse_copy_to_wasm
+        );
+
+        console.log(
+            "lzfse_read_byte :",
+            typeof module._lzfse_read_byte
+        );
+
+        console.log(
+            "decode_lzfse_buffer :",
+            typeof module._decode_lzfse_buffer
+        );
+
+
+        if (
+            typeof module._lzfse_malloc !== "function" ||
+            typeof module._lzfse_free !== "function" ||
+            typeof module._lzfse_copy_to_wasm !== "function" ||
+            typeof module._lzfse_read_byte !== "function" ||
+            typeof module._decode_lzfse_buffer !== "function"
+        )
+        {
+            throw new Error(
+                "Une fonction LZFSE n'est pas disponible dans le module WASM."
+            );
+        }
+
 
         lzfseModule = module;
 
-        lzfseModule.decodeLZFSEFile =
-    lzfseModule.cwrap(
-        "decode_lzfse_file",
-        "number",
-        ["string", "string", "number"]
-    );
-
-console.log(
-    "decodeLZFSEFile :",
-    lzfseModule.decodeLZFSEFile
-);
-
         console.log("LZFSE prêt");
-
     }
-    catch (error) {
-
+    catch (error)
+    {
         console.error(
             "ERREUR INITIALISATION LZFSE :",
             error
@@ -81,378 +105,123 @@ console.log(
 
 
 // ============================================================
-// DOM
+// UTILITAIRE : distance entre deux touches
 // ============================================================
 
-document.addEventListener("DOMContentLoaded", () => {
+function touchDistance(touch1, touch2)
+{
+    const dx =
+        touch2.clientX -
+        touch1.clientX;
 
-    canvas =
-        document.getElementById("canvas");
+    const dy =
+        touch2.clientY -
+        touch1.clientY;
 
-    ctx =
-        canvas.getContext("2d");
-
-    const imageInput =
-        document.getElementById("imageInput");
-
-    const grilleInput =
-        document.getElementById("grilleInput");
-
-    const openButton =
-        document.getElementById("openButton");
-
-    const openGrilleButton =
-        document.getElementById("openGrilleButton");
-
-    const clearButton =
-        document.getElementById("clearButton");
-
-    const tileSizeInput =
-        document.getElementById("tileSize");
-
-
-    // --------------------------------------------------------
-    // Ouvrir image
-    // --------------------------------------------------------
-
-    if (openButton) {
-
-        openButton.addEventListener(
-            "click",
-            () => imageInput.click()
-        );
-    }
-
-
-    if (imageInput) {
-
-        imageInput.addEventListener(
-            "change",
-            event => {
-
-                const file =
-                    event.target.files[0];
-
-                if (!file) {
-                    return;
-                }
-
-                loadImageFile(file);
-            }
-        );
-    }
-
-
-    // --------------------------------------------------------
-    // Ouvrir grille
-    // --------------------------------------------------------
-
-    if (openGrilleButton) {
-
-        openGrilleButton.addEventListener(
-            "click",
-            () => grilleInput.click()
-        );
-    }
-
-
-    if (grilleInput) {
-
-        grilleInput.addEventListener(
-            "change",
-            async event => {
-
-                const file =
-                    event.target.files[0];
-
-                if (!file) {
-                    return;
-                }
-
-                try {
-
-                    const decoded =
-                        await loadGrilleFile(file);
-
-                    console.log(
-                        "NSKeyedArchiver récupéré :",
-                        decoded.length,
-                        "octets"
-                    );
-
-                    /*
-                     * Pour l'instant le buffer contient le
-                     * NSKeyedArchiver.
-                     *
-                     * Le décodage de l'archive viendra ensuite.
-                     */
-
-                }
-                catch (error) {
-
-                    console.error(
-                        "Erreur lecture grille :",
-                        error
-                    );
-
-                    alert(
-                        "Impossible de lire le fichier .grille.\n\n" +
-                        error.message
-                    );
-                }
-
-                // Permet de sélectionner à nouveau le même fichier.
-                event.target.value = "";
-            }
-        );
-    }
-
-
-    // --------------------------------------------------------
-    // Effacer
-    // --------------------------------------------------------
-
-    if (clearButton) {
-
-        clearButton.addEventListener(
-            "click",
-            clearSelection
-        );
-    }
-
-
-    // --------------------------------------------------------
-    // Taille des cases
-    // --------------------------------------------------------
-
-    if (tileSizeInput) {
-
-        tileSizeInput.addEventListener(
-            "change",
-            () => {
-
-                let value =
-                    parseInt(
-                        tileSizeInput.value,
-                        10
-                    );
-
-                if (!Number.isFinite(value)) {
-                    value = 20;
-                }
-
-                value =
-                    Math.max(
-                        2,
-                        Math.min(100, value)
-                    );
-
-                tileSize = value;
-
-                tileSizeInput.value =
-                    String(tileSize);
-
-                recomputeGrid();
-                drawGrid();
-            }
-        );
-    }
-
-
-    // --------------------------------------------------------
-    // Souris
-    // --------------------------------------------------------
-
-    canvas.addEventListener(
-        "click",
-        event => {
-
-            if (!sourceImage) {
-                return;
-            }
-
-            const rect =
-                canvas.getBoundingClientRect();
-
-            const x =
-                (event.clientX - rect.left) /
-                zoomFactor;
-
-            const y =
-                (event.clientY - rect.top) /
-                zoomFactor;
-
-            selectTileAtPoint(x, y);
-        }
+    return Math.sqrt(
+        dx * dx +
+        dy * dy
     );
-
-
-    // --------------------------------------------------------
-    // Touch
-    // --------------------------------------------------------
-
-    canvas.addEventListener(
-        "touchstart",
-        handleTouchStart,
-        {
-            passive: false
-        }
-    );
-
-    canvas.addEventListener(
-        "touchmove",
-        handleTouchMove,
-        {
-            passive: false
-        }
-    );
-
-    canvas.addEventListener(
-        "touchend",
-        handleTouchEnd,
-        {
-            passive: false
-        }
-    );
-
-
-    // --------------------------------------------------------
-    // Resize
-    // --------------------------------------------------------
-
-    window.addEventListener(
-        "resize",
-        () => {
-
-            if (sourceImage) {
-                drawGrid();
-            }
-        }
-    );
-
-
-    // --------------------------------------------------------
-    // Initialisation
-    // --------------------------------------------------------
-
-    initializeLZFSE();
-
-});
-
-
-// ============================================================
-// CHARGEMENT IMAGE
-// ============================================================
-
-function loadImageFile(file) {
-
-    console.log(
-        "Chargement image :",
-        file.name
-    );
-
-    const reader =
-        new FileReader();
-
-    reader.onload = event => {
-
-        const image =
-            new Image();
-
-        image.onload = () => {
-
-            sourceImage = image;
-
-            zoomFactor = 1.0;
-
-            selectedTiles.clear();
-
-            recomputeGrid();
-
-            drawGrid();
-
-            updateInfo();
-
-            console.log(
-                "Image chargée :",
-                image.width,
-                "x",
-                image.height
-            );
-        };
-
-        image.onerror = () => {
-
-            console.error(
-                "Impossible de décoder l'image"
-            );
-
-            alert(
-                "Impossible de charger cette image."
-            );
-        };
-
-        image.src =
-            event.target.result;
-    };
-
-    reader.onerror = () => {
-
-        alert(
-            "Erreur lors de la lecture de l'image."
-        );
-    };
-
-    reader.readAsDataURL(file);
 }
 
 
 // ============================================================
-// GRILLE
+// UTILITAIRE : position dans le canvas
 // ============================================================
 
-function recomputeGrid() {
+function canvasPointFromEvent(event)
+{
+    const rect =
+        canvas.getBoundingClientRect();
 
-    if (!sourceImage) {
+    return {
+        x:
+            (event.clientX - rect.left) /
+            zoomFactor,
 
-        cols = 0;
-        rows = 0;
+        y:
+            (event.clientY - rect.top) /
+            zoomFactor
+    };
+}
 
+
+// ============================================================
+// CALCUL DE LA GRILLE
+// ============================================================
+
+function recomputeGrid()
+{
+    if (!sourceImage)
         return;
-    }
+
 
     cols =
         Math.ceil(
-            sourceImage.width /
+            sourceImage.naturalWidth /
             tileSize
         );
 
     rows =
         Math.ceil(
-            sourceImage.height /
+            sourceImage.naturalHeight /
             tileSize
         );
+
 
     canvas.width =
         cols * tileSize;
 
     canvas.height =
         rows * tileSize;
+
+
+    updateCanvasSize();
+
+    draw();
+
+    updateInfo();
 }
 
 
 // ============================================================
-// DESSIN
+// TAILLE AFFICHÉE DU CANVAS
 // ============================================================
 
-function drawGrid() {
-
-    if (!ctx) {
+function updateCanvasSize()
+{
+    if (!canvas)
         return;
-    }
 
 
-    ctx.save();
+    canvas.style.width =
+        (canvas.width * zoomFactor) +
+        "px";
+
+    canvas.style.height =
+        (canvas.height * zoomFactor) +
+        "px";
+}
+
+
+// ============================================================
+// AFFICHAGE
+// ============================================================
+
+function draw()
+{
+    if (!canvas || !ctx)
+        return;
+
+
+    ctx.setTransform(
+        1,
+        0,
+        0,
+        1,
+        0,
+        0
+    );
 
     ctx.clearRect(
         0,
@@ -462,12 +231,8 @@ function drawGrid() {
     );
 
 
-    // --------------------------------------------------------
-    // Image
-    // --------------------------------------------------------
-
-    if (sourceImage) {
-
+    if (sourceImage)
+    {
         ctx.drawImage(
             sourceImage,
             0,
@@ -479,58 +244,25 @@ function drawGrid() {
 
 
     // --------------------------------------------------------
-    // Grille
-    // --------------------------------------------------------
-
-    if (sourceImage) {
-
-        ctx.beginPath();
-
-        for (let x = 0;
-             x <= cols * tileSize;
-             x += tileSize) {
-
-            ctx.moveTo(x, 0);
-            ctx.lineTo(
-                x,
-                rows * tileSize
-            );
-        }
-
-        for (let y = 0;
-             y <= rows * tileSize;
-             y += tileSize) {
-
-            ctx.moveTo(0, y);
-            ctx.lineTo(
-                cols * tileSize,
-                y
-            );
-        }
-
-        ctx.strokeStyle =
-            "rgba(0,0,0,0.25)";
-
-        ctx.lineWidth = 1;
-
-        ctx.stroke();
-    }
-
-
-    // --------------------------------------------------------
     // Cases sélectionnées
     // --------------------------------------------------------
 
-    ctx.fillStyle =
-        "rgba(255,255,255,0.45)";
+    ctx.save();
 
-    selectedTiles.forEach(index => {
+    ctx.globalAlpha = 0.35;
+
+    ctx.fillStyle =
+        "rgba(255, 0, 0, 0.5)";
+
+
+    for (const index of selectedTiles)
+    {
+        const col =
+            index % cols;
 
         const row =
             Math.floor(index / cols);
 
-        const col =
-            index % cols;
 
         ctx.fillRect(
             col * tileSize,
@@ -538,73 +270,64 @@ function drawGrid() {
             tileSize,
             tileSize
         );
-    });
+    }
 
 
     ctx.restore();
-}
 
 
-// ============================================================
-// SELECTION CASE
-// ============================================================
+    // --------------------------------------------------------
+    // Grille
+    // --------------------------------------------------------
 
-function selectTileAtPoint(x, y) {
+    if (sourceImage)
+    {
+        ctx.save();
 
-    if (!sourceImage ||
-        cols <= 0 ||
-        rows <= 0) {
+        ctx.strokeStyle =
+            "rgba(0, 0, 0, 0.25)";
 
-        return;
+        ctx.lineWidth = 1;
+
+
+        for (let x = 0; x <= cols; x++)
+        {
+            ctx.beginPath();
+
+            ctx.moveTo(
+                x * tileSize + 0.5,
+                0
+            );
+
+            ctx.lineTo(
+                x * tileSize + 0.5,
+                rows * tileSize
+            );
+
+            ctx.stroke();
+        }
+
+
+        for (let y = 0; y <= rows; y++)
+        {
+            ctx.beginPath();
+
+            ctx.moveTo(
+                0,
+                y * tileSize + 0.5
+            );
+
+            ctx.lineTo(
+                cols * tileSize,
+                y * tileSize + 0.5
+            );
+
+            ctx.stroke();
+        }
+
+
+        ctx.restore();
     }
-
-
-    const col =
-        Math.floor(x / tileSize);
-
-    const row =
-        Math.floor(y / tileSize);
-
-
-    if (col < 0 ||
-        col >= cols ||
-        row < 0 ||
-        row >= rows) {
-
-        return;
-    }
-
-
-    const index =
-        row * cols + col;
-
-
-    if (selectedTiles.has(index)) {
-
-        selectedTiles.delete(index);
-
-    } else {
-
-        selectedTiles.add(index);
-    }
-
-
-    drawGrid();
-    updateInfo();
-}
-
-
-// ============================================================
-// EFFACER
-// ============================================================
-
-function clearSelection() {
-
-    selectedTiles.clear();
-
-    drawGrid();
-
-    updateInfo();
 }
 
 
@@ -612,18 +335,17 @@ function clearSelection() {
 // INFORMATIONS
 // ============================================================
 
-function updateInfo() {
-
+function updateInfo()
+{
     const info =
         document.getElementById("info");
 
-    if (!info) {
+    if (!info)
         return;
-    }
 
 
-    if (!sourceImage) {
-
+    if (!sourceImage)
+    {
         info.textContent =
             "Aucune image";
 
@@ -632,185 +354,132 @@ function updateInfo() {
 
 
     info.textContent =
-        `${sourceImage.width} × ${sourceImage.height} — ` +
-        `${cols} × ${rows} — ` +
-        `${selectedTiles.size} sélectionnée(s)`;
+        `${sourceImage.naturalWidth} × ` +
+        `${sourceImage.naturalHeight} — ` +
+        `${cols} × ${rows} cases — ` +
+        `${selectedTiles.size} sélectionnées`;
 }
 
 
 // ============================================================
-// TOUCH
+// CHARGEMENT IMAGE
 // ============================================================
 
-function handleTouchStart(event) {
-
-    event.preventDefault();
-
-
-    if (event.touches.length === 1) {
-
-        const touch =
-            event.touches[0];
-
-        touchStartX =
-            touch.clientX;
-
-        touchStartY =
-            touch.clientY;
-
-        isDragging = false;
-
+function loadImageFile(file)
+{
+    if (!file)
         return;
-    }
 
 
-    if (event.touches.length === 2) {
-
-        lastTouchDistance =
-            getTouchDistance(
-                event.touches[0],
-                event.touches[1]
-            );
-    }
-}
-
-
-function handleTouchMove(event) {
-
-    event.preventDefault();
-
-
-    // --------------------------------------------------------
-    // Zoom à deux doigts
-    // --------------------------------------------------------
-
-    if (event.touches.length === 2) {
-
-        const distance =
-            getTouchDistance(
-                event.touches[0],
-                event.touches[1]
-            );
-
-
-        if (lastTouchDistance !== null) {
-
-            const delta =
-                distance -
-                lastTouchDistance;
-
-
-            zoomFactor *=
-                1 + delta * 0.005;
-
-
-            zoomFactor =
-                Math.max(
-                    0.2,
-                    Math.min(
-                        5.0,
-                        zoomFactor
-                    )
-                );
-
-
-            applyZoom();
-        }
-
-
-        lastTouchDistance =
-            distance;
-
-        return;
-    }
-
-
-    // --------------------------------------------------------
-    // Déplacement / sélection
-    // --------------------------------------------------------
-
-    if (event.touches.length === 1) {
-
-        const touch =
-            event.touches[0];
-
-        const dx =
-            touch.clientX -
-            touchStartX;
-
-        const dy =
-            touch.clientY -
-            touchStartY;
-
-
-        if (Math.abs(dx) > 8 ||
-            Math.abs(dy) > 8) {
-
-            isDragging = true;
-        }
-    }
-}
-
-
-function handleTouchEnd(event) {
-
-    event.preventDefault();
-
-
-    if (event.touches.length === 0) {
-
-        lastTouchDistance = null;
-    }
-
-
-    /*
-     * Une seule touche qui n'a pratiquement pas bougé =
-     * sélection d'une case.
-     */
-
-    if (!isDragging &&
-        event.changedTouches.length === 1) {
-
-        const touch =
-            event.changedTouches[0];
-
-        const rect =
-            canvas.getBoundingClientRect();
-
-
-        const x =
-            (touch.clientX - rect.left) /
-            zoomFactor;
-
-        const y =
-            (touch.clientY - rect.top) /
-            zoomFactor;
-
-
-        selectTileAtPoint(x, y);
-    }
-
-
-    isDragging = false;
-}
-
-
-// ============================================================
-// DISTANCE ENTRE DEUX DOIGTS
-// ============================================================
-
-function getTouchDistance(a, b) {
-
-    const dx =
-        a.clientX - b.clientX;
-
-    const dy =
-        a.clientY - b.clientY;
-
-    return Math.sqrt(
-        dx * dx +
-        dy * dy
+    console.log(
+        "Ouverture image :",
+        file.name
     );
+
+
+    const url =
+        URL.createObjectURL(file);
+
+
+    const image =
+        new Image();
+
+
+    image.onload = () =>
+    {
+        URL.revokeObjectURL(url);
+
+        sourceImage = image;
+
+        selectedTiles.clear();
+
+        recomputeGrid();
+    };
+
+
+    image.onerror = () =>
+    {
+        URL.revokeObjectURL(url);
+
+        console.error(
+            "Impossible de charger l'image."
+        );
+    };
+
+
+    image.src = url;
+}
+
+
+// ============================================================
+// CASE À PARTIR D'UN POINT
+// ============================================================
+
+function tileIndexFromPoint(x, y)
+{
+    const col =
+        Math.floor(x / tileSize);
+
+    const row =
+        Math.floor(y / tileSize);
+
+
+    if (
+        col < 0 ||
+        row < 0 ||
+        col >= cols ||
+        row >= rows
+    )
+    {
+        return -1;
+    }
+
+
+    return row * cols + col;
+}
+
+
+// ============================================================
+// SÉLECTION D'UNE CASE
+// ============================================================
+
+function toggleTileAtPoint(x, y)
+{
+    const index =
+        tileIndexFromPoint(x, y);
+
+
+    if (index < 0)
+        return;
+
+
+    if (selectedTiles.has(index))
+    {
+        selectedTiles.delete(index);
+    }
+    else
+    {
+        selectedTiles.add(index);
+    }
+
+
+    draw();
+
+    updateInfo();
+}
+
+
+// ============================================================
+// EFFACER
+// ============================================================
+
+function clearAll()
+{
+    selectedTiles.clear();
+
+    draw();
+
+    updateInfo();
 }
 
 
@@ -818,56 +487,346 @@ function getTouchDistance(a, b) {
 // ZOOM
 // ============================================================
 
-function applyZoom() {
+function setZoom(value)
+{
+    zoomFactor =
+        Math.max(
+            0.2,
+            Math.min(
+                5.0,
+                value
+            )
+        );
 
-    canvas.style.transform =
-        `scale(${zoomFactor})`;
 
-    canvas.style.transformOrigin =
-        "top left";
+    updateCanvasSize();
 }
 
 
 // ============================================================
-// LECTURE .GRILLE / LZFSE
+// LZFSE : COPIE JS -> WASM
 // ============================================================
 
-async function loadGrilleFile(file) {
-
-    console.log("===============================");
-    console.log("OUVERTURE GRILLE");
-    console.log("Nom :", file.name);
-    console.log("Taille fichier :", file.size);
-    console.log("Type :", file.type);
-    console.log("===============================");
+function copyBytesToWasm(bytes)
+{
+    if (!lzfseModule)
+        throw new Error("LZFSE non initialisé");
 
 
-    if (!lzfseModule) {
+    const ptr =
+        lzfseModule._lzfse_malloc(
+            bytes.length
+        );
 
+
+    if (!ptr)
+    {
         throw new Error(
-            "Module LZFSE non chargé"
+            "Impossible d'allouer la mémoire WASM."
         );
     }
 
 
-    // --------------------------------------------------------
-    // Vérifier que la bonne fonction est présente
-    // --------------------------------------------------------
+    // On copie les données JavaScript
+    // dans la mémoire WASM octet par octet
+    //
+    // La fonction C fait le vrai memcpy.
+    //
+    // Pour lui passer la source JavaScript,
+    // on utilise temporairement FS n'est PAS possible
+    // ici. Nous allons donc utiliser un buffer
+    // Uint8Array partagé avec la mémoire WASM.
+    //
+    // Cette fonction est remplacée plus bas par
+    // copyBytesToWasmDirect() si wasmMemory est disponible.
 
-    console.log(
-        "decode_lzfse_file :",
-        lzfseModule._decode_lzfse_file
-    );
+
+    return ptr;
+}
+
+
+// ============================================================
+// ACCÈS MÉMOIRE WASM
+// ============================================================
+
+function getWasmMemory()
+{
+    /*
+     * Les versions modernes d'Emscripten exposent
+     * normalement la mémoire sous forme de WebAssembly.Memory.
+     */
+
+    if (
+        lzfseModule &&
+        lzfseModule.wasmMemory
+    )
+    {
+        return lzfseModule.wasmMemory;
+    }
 
 
     if (
-        typeof lzfseModule._decode_lzfse_file !==
-        "function"
-    ) {
+        lzfseModule &&
+        lzfseModule.asm &&
+        lzfseModule.asm.memory
+    )
+    {
+        return lzfseModule.asm.memory;
+    }
+
+
+    return null;
+}
+
+
+// ============================================================
+// COPIE DIRECTE VERS WASM
+// ============================================================
+
+function copyBytesIntoWasm(ptr, bytes)
+{
+    const memory =
+        getWasmMemory();
+
+
+    if (!memory)
+    {
+        throw new Error(
+            "La mémoire WASM n'est pas accessible."
+        );
+    }
+
+
+    const heap =
+        new Uint8Array(
+            memory.buffer
+        );
+
+
+    heap.set(
+        bytes,
+        ptr
+    );
+}
+
+
+// ============================================================
+// LECTURE DEPUIS WASM
+// ============================================================
+
+function copyBytesFromWasm(ptr, size)
+{
+    const memory =
+        getWasmMemory();
+
+
+    if (!memory)
+    {
+        throw new Error(
+            "La mémoire WASM n'est pas accessible."
+        );
+    }
+
+
+    const heap =
+        new Uint8Array(
+            memory.buffer
+        );
+
+
+    const result =
+        new Uint8Array(size);
+
+
+    result.set(
+        heap.subarray(
+            ptr,
+            ptr + size
+        )
+    );
+
+
+    return result;
+}
+
+
+// ============================================================
+// DÉCOMPRESSION LZFSE DIRECTE
+// ============================================================
+
+function decompressLZFSE(compressed,
+                         originalSize)
+{
+    if (!lzfseModule)
+    {
+        throw new Error(
+            "Le module LZFSE n'est pas prêt."
+        );
+    }
+
+
+    console.log(
+        "Décompression directe LZFSE..."
+    );
+
+
+    console.log(
+        "Compressed :",
+        compressed.length
+    );
+
+    console.log(
+        "Expected :",
+        originalSize
+    );
+
+
+    // --------------------------------------------------------
+    // Allocation WASM
+    // --------------------------------------------------------
+
+    const compressedPtr =
+        lzfseModule._lzfse_malloc(
+            compressed.length
+        );
+
+
+    if (!compressedPtr)
+    {
+        throw new Error(
+            "Allocation compressed impossible."
+        );
+    }
+
+
+    const decodedPtr =
+        lzfseModule._lzfse_malloc(
+            originalSize
+        );
+
+
+    if (!decodedPtr)
+    {
+        lzfseModule._lzfse_free(
+            compressedPtr
+        );
 
         throw new Error(
-            "La fonction _decode_lzfse_file " +
-            "n'est pas disponible dans lzfse.wasm"
+            "Allocation decoded impossible."
+        );
+    }
+
+
+    try
+    {
+        // ----------------------------------------------------
+        // JS -> WASM
+        // ----------------------------------------------------
+
+        copyBytesIntoWasm(
+            compressedPtr,
+            compressed
+        );
+
+
+        // ----------------------------------------------------
+        // LZFSE
+        // ----------------------------------------------------
+
+        const decodedSize =
+            lzfseModule._decode_lzfse_buffer(
+                compressedPtr,
+                compressed.length,
+                decodedPtr,
+                originalSize
+            );
+
+
+        console.log(
+            "Taille décompressée :",
+            decodedSize
+        );
+
+
+        if (!decodedSize)
+        {
+            throw new Error(
+                "Échec de la décompression LZFSE."
+            );
+        }
+
+
+        // ----------------------------------------------------
+        // WASM -> JS
+        // ----------------------------------------------------
+
+        const decoded =
+            copyBytesFromWasm(
+                decodedPtr,
+                decodedSize
+            );
+
+
+        console.log(
+            "Archive décompressée :",
+            decoded.length,
+            "octets"
+        );
+
+
+        return decoded;
+    }
+    finally
+    {
+        lzfseModule._lzfse_free(
+            compressedPtr
+        );
+
+        lzfseModule._lzfse_free(
+            decodedPtr
+        );
+    }
+}
+
+
+// ============================================================
+// LECTURE FICHIER .GRILLE
+// ============================================================
+
+async function loadGrilleFile(file)
+{
+    console.log(
+        "==============================="
+    );
+
+    console.log(
+        "OUVERTURE GRILLE"
+    );
+
+    console.log(
+        "Nom :",
+        file.name
+    );
+
+    console.log(
+        "Taille fichier :",
+        file.size
+    );
+
+    console.log(
+        "Type :",
+        file.type
+    );
+
+    console.log(
+        "==============================="
+    );
+
+
+    if (!lzfseModule)
+    {
+        throw new Error(
+            "Le module LZFSE n'est pas prêt."
         );
     }
 
@@ -880,23 +839,29 @@ async function loadGrilleFile(file) {
         await file.arrayBuffer();
 
 
+    const bytes =
+        new Uint8Array(buffer);
+
+
     console.log(
         "Buffer reçu :",
-        buffer.byteLength,
+        bytes.length,
         "octets"
     );
 
 
-    if (buffer.byteLength < 8) {
-
+    if (bytes.length < 8)
+    {
         throw new Error(
-            "Fichier .grille trop petit"
+            "Fichier .grille trop court."
         );
     }
 
 
     // --------------------------------------------------------
     // Taille originale
+    //
+    // Les 8 premiers octets sont un uint64 little endian.
     // --------------------------------------------------------
 
     const view =
@@ -921,257 +886,553 @@ async function loadGrilleFile(file) {
 
 
     if (
-        !Number.isSafeInteger(originalSize) ||
-        originalSize <= 0
-    ) {
-
-        throw new Error(
-            "Taille originale invalide : " +
+        !Number.isSafeInteger(
             originalSize
+        ) ||
+        originalSize <= 0
+    )
+    {
+        throw new Error(
+            "Taille originale invalide."
         );
     }
 
 
     // --------------------------------------------------------
-    // Données compressées
+    // Données LZFSE
     // --------------------------------------------------------
 
-    const compressedOffset = 8;
-
-    const compressedSize =
-        buffer.byteLength -
-        compressedOffset;
+    const compressed =
+        bytes.subarray(8);
 
 
     console.log(
         "Taille LZFSE :",
-        compressedSize
+        compressed.length
     );
 
 
-    if (compressedSize < 4) {
-
-        throw new Error(
-            "Données LZFSE absentes"
-        );
-    }
-
-
-    const compressed =
-        new Uint8Array(
-            buffer,
-            compressedOffset,
-            compressedSize
-        );
-
-
     // --------------------------------------------------------
-    // Signature
+    // Vérification signature
     // --------------------------------------------------------
 
-    const magic =
-        String.fromCharCode(
-            compressed[0],
-            compressed[1],
-            compressed[2],
-            compressed[3]
+    if (compressed.length >= 4)
+    {
+        const signature =
+            String.fromCharCode(
+                compressed[0],
+                compressed[1],
+                compressed[2],
+                compressed[3]
+            );
+
+
+        console.log(
+            "Signature LZFSE :",
+            signature
         );
 
 
-    console.log(
-        "Signature LZFSE :",
-        magic
-    );
-
-
-    if (
-        magic !== "bvx2" &&
-        magic !== "bvx1" &&
-        magic !== "bvxn" &&
-        magic !== "bvx-"
-    ) {
-
-        throw new Error(
-            "Signature LZFSE inconnue : " +
-            magic
-        );
+        if (signature !== "bvx2")
+        {
+            console.warn(
+                "Signature LZFSE inattendue :",
+                signature
+            );
+        }
     }
-
-
-    // --------------------------------------------------------
-    // Fichiers virtuels Emscripten
-    // --------------------------------------------------------
-
-    const inputPath =
-        "/grille_input.lzfse";
-
-    const outputPath =
-        "/grille_output.bin";
-
-
-    // --------------------------------------------------------
-    // Nettoyage
-    // --------------------------------------------------------
-
-    try {
-        lzfseModule.FS.unlink(inputPath);
-    }
-    catch (e) {
-    }
-
-
-    try {
-        lzfseModule.FS.unlink(outputPath);
-    }
-    catch (e) {
-    }
-
-
-    // --------------------------------------------------------
-    // Ecriture du fichier LZFSE dans MEMFS
-    // --------------------------------------------------------
-
-    console.log(
-        "Copie des données LZFSE dans MEMFS..."
-    );
-
-
-    lzfseModule.FS.writeFile(
-        inputPath,
-        compressed
-    );
-
-
-    console.log(
-        "Fichier MEMFS créé :",
-        inputPath
-    );
 
 
     // --------------------------------------------------------
     // Décompression
     // --------------------------------------------------------
 
-    console.log(
-        "Décompression LZFSE..."
-    );
+    const decoded =
+        decompressLZFSE(
+            compressed,
+            originalSize
+        );
 
 
-    const decodedSize =
-    lzfseModule.decodeLZFSEFile(
-        inputPath,
-        outputPath,
+    // --------------------------------------------------------
+    // Vérification
+    // --------------------------------------------------------
+
+    if (
+        decoded.length !==
         originalSize
-    );
-
-    console.log(
-        "Taille décompressée :",
-        decodedSize
-    );
-
-
-    if (!decodedSize || decodedSize <= 0) {
-
-        throw new Error(
-            "Échec de la décompression LZFSE"
+    )
+    {
+        console.warn(
+            "Taille obtenue différente de la taille annoncée :",
+            decoded.length,
+            originalSize
         );
     }
 
 
-    // --------------------------------------------------------
-    // Lire le résultat
-    // --------------------------------------------------------
+    console.log(
+        "Décompression terminée."
+    );
 
-    const decoded =
-        lzfseModule.FS.readFile(
-            outputPath
-        );
+
+    // Pour l'instant on conserve les données
+    // afin de préparer le décodage NSKeyedArchiver.
+    window.lastDecodedGrille =
+        decoded;
 
 
     console.log(
-        "Buffer décompressé récupéré :",
+        "window.lastDecodedGrille disponible :",
         decoded.length,
         "octets"
     );
 
 
     // --------------------------------------------------------
-    // Vérification taille
+    // Analyse rapide des premiers octets
     // --------------------------------------------------------
-
-    if (
-        decoded.length !==
-        originalSize
-    ) {
-
-        console.warn(
-            "ATTENTION : taille différente !",
-            "annoncée =",
-            originalSize,
-            "obtenue =",
-            decoded.length
-        );
-
-    } else {
-
-        console.log(
-            "Taille décompressée correcte."
-        );
-    }
-
-
-    // --------------------------------------------------------
-    // Afficher les premiers octets
-    // --------------------------------------------------------
-
-    let hex = "";
-
-    const count =
-        Math.min(
-            32,
-            decoded.length
-        );
-
-
-    for (let i = 0;
-         i < count;
-         i++) {
-
-        hex +=
-            decoded[i]
-                .toString(16)
-                .padStart(2, "0") +
-            " ";
-    }
-
 
     console.log(
-        "Premiers octets décompressés :",
-        hex
+        "Premiers octets de l'archive :",
+        Array.from(
+            decoded.subarray(
+                0,
+                Math.min(32, decoded.length)
+            )
+        )
     );
 
 
     // --------------------------------------------------------
-    // Nettoyage MEMFS
+    // Pour l'instant
     // --------------------------------------------------------
 
-    try {
-        lzfseModule.FS.unlink(inputPath);
-    }
-    catch (e) {
-    }
-
-
-    try {
-        lzfseModule.FS.unlink(outputPath);
-    }
-    catch (e) {
-    }
-
-
-    // --------------------------------------------------------
-    // Retourner une copie indépendante du buffer WASM
-    // --------------------------------------------------------
-
-    return new Uint8Array(decoded);
+    alert(
+        "Décompression LZFSE réussie : " +
+        decoded.length +
+        " octets."
+    );
 }
+
+
+// ============================================================
+// DOM
+// ============================================================
+
+document.addEventListener(
+    "DOMContentLoaded",
+    async () =>
+{
+    canvas =
+        document.getElementById(
+            "canvas"
+        );
+
+
+    if (!canvas)
+    {
+        console.error(
+            "Canvas #canvas introuvable !"
+        );
+
+        return;
+    }
+
+
+    ctx =
+        canvas.getContext("2d");
+
+
+    if (!ctx)
+    {
+        console.error(
+            "Impossible de créer le contexte 2D."
+        );
+
+        return;
+    }
+
+
+    const imageInput =
+        document.getElementById(
+            "imageInput"
+        );
+
+
+    const grilleInput =
+        document.getElementById(
+            "grilleInput"
+        );
+
+
+    const openButton =
+        document.getElementById(
+            "openButton"
+        );
+
+
+    const openGrilleButton =
+        document.getElementById(
+            "openGrilleButton"
+        );
+
+
+    const clearButton =
+        document.getElementById(
+            "clearButton"
+        );
+
+
+    const tileSizeInput =
+        document.getElementById(
+            "tileSize"
+        );
+
+
+    // --------------------------------------------------------
+    // Ouvrir image
+    // --------------------------------------------------------
+
+    if (openButton)
+    {
+        openButton.addEventListener(
+            "click",
+            () =>
+            {
+                imageInput.click();
+            }
+        );
+    }
+
+
+    if (imageInput)
+    {
+        imageInput.addEventListener(
+            "change",
+            event =>
+            {
+                const file =
+                    event.target.files[0];
+
+                if (file)
+                {
+                    loadImageFile(file);
+                }
+            }
+        );
+    }
+
+
+    // --------------------------------------------------------
+    // Ouvrir grille
+    // --------------------------------------------------------
+
+    if (openGrilleButton)
+    {
+        openGrilleButton.addEventListener(
+            "click",
+            () =>
+            {
+                grilleInput.click();
+            }
+        );
+    }
+
+
+    if (grilleInput)
+    {
+        grilleInput.addEventListener(
+            "change",
+            async event =>
+            {
+                const file =
+                    event.target.files[0];
+
+                if (!file)
+                    return;
+
+
+                try
+                {
+                    await loadGrilleFile(
+                        file
+                    );
+                }
+                catch (error)
+                {
+                    console.error(
+                        "Erreur lecture grille :",
+                        error
+                    );
+
+                    alert(
+                        "Erreur lecture grille :\n\n" +
+                        error.message
+                    );
+                }
+            }
+        );
+    }
+
+
+    // --------------------------------------------------------
+    // Effacer
+    // --------------------------------------------------------
+
+    if (clearButton)
+    {
+        clearButton.addEventListener(
+            "click",
+            clearAll
+        );
+    }
+
+
+    // --------------------------------------------------------
+    // Taille des cases
+    // --------------------------------------------------------
+
+    if (tileSizeInput)
+    {
+        tileSizeInput.addEventListener(
+            "change",
+            () =>
+            {
+                let value =
+                    parseInt(
+                        tileSizeInput.value,
+                        10
+                    );
+
+
+                if (
+                    !Number.isFinite(
+                        value
+                    )
+                )
+                {
+                    value = 20;
+                }
+
+
+                value =
+                    Math.max(
+                        2,
+                        Math.min(
+                            100,
+                            value
+                        )
+                    );
+
+
+                tileSize =
+                    value;
+
+
+                tileSizeInput.value =
+                    value;
+
+
+                if (sourceImage)
+                {
+                    recomputeGrid();
+                }
+            }
+        );
+    }
+
+
+    // --------------------------------------------------------
+    // Touch
+    // --------------------------------------------------------
+
+    canvas.addEventListener(
+        "touchstart",
+        event =>
+        {
+            event.preventDefault();
+
+
+            if (
+                event.touches.length === 2
+            )
+            {
+                lastTouchDistance =
+                    touchDistance(
+                        event.touches[0],
+                        event.touches[1]
+                    );
+
+                isDragging = false;
+
+                return;
+            }
+
+
+            if (
+                event.touches.length === 1
+            )
+            {
+                const touch =
+                    event.touches[0];
+
+
+                touchStartX =
+                    touch.clientX;
+
+                touchStartY =
+                    touch.clientY;
+
+                isDragging = false;
+            }
+        },
+        {
+            passive: false
+        }
+    );
+
+
+    canvas.addEventListener(
+        "touchmove",
+        event =>
+        {
+            event.preventDefault();
+
+
+            // ------------------------------------------------
+            // Deux doigts = zoom
+            // ------------------------------------------------
+
+            if (
+                event.touches.length === 2
+            )
+            {
+                const distance =
+                    touchDistance(
+                        event.touches[0],
+                        event.touches[1]
+                    );
+
+
+                if (
+                    lastTouchDistance !== null
+                )
+                {
+                    const ratio =
+                        distance /
+                        lastTouchDistance;
+
+
+                    setZoom(
+                        zoomFactor * ratio
+                    );
+                }
+
+
+                lastTouchDistance =
+                    distance;
+
+
+                return;
+            }
+
+
+            // ------------------------------------------------
+            // Un doigt = sélection
+            // ------------------------------------------------
+
+            if (
+                event.touches.length === 1
+            )
+            {
+                const touch =
+                    event.touches[0];
+
+
+                const dx =
+                    touch.clientX -
+                    touchStartX;
+
+                const dy =
+                    touch.clientY -
+                    touchStartY;
+
+
+                if (
+                    Math.abs(dx) > 5 ||
+                    Math.abs(dy) > 5
+                )
+                {
+                    isDragging = true;
+                }
+            }
+        },
+        {
+            passive: false
+        }
+    );
+
+
+    canvas.addEventListener(
+        "touchend",
+        event =>
+        {
+            event.preventDefault();
+
+
+            if (
+                event.touches.length < 2
+            )
+            {
+                lastTouchDistance =
+                    null;
+            }
+
+
+            if (
+                event.changedTouches.length === 1 &&
+                !isDragging
+            )
+            {
+                const touch =
+                    event.changedTouches[0];
+
+
+                const point =
+                    canvasPointFromEvent(
+                        touch
+                    );
+
+
+                toggleTileAtPoint(
+                    point.x,
+                    point.y
+                );
+            }
+
+
+            isDragging = false;
+        },
+        {
+            passive: false
+        }
+    );
+
+
+    // --------------------------------------------------------
+    // Initialisation
+    // --------------------------------------------------------
+
+    try
+    {
+        await initializeLZFSE();
+    }
+    catch (error)
+    {
+        console.error(
+            "LZFSE indisponible :",
+            error
+        );
+    }
+});
