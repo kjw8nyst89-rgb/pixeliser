@@ -1402,6 +1402,291 @@ function inspectKeyedArchive(bytes)
 }
 
 // ============================================================
+// NSKeyedArchiver RESOLVER
+// ============================================================
+
+class KeyedArchiveResolver
+{
+    constructor(plist)
+    {
+        this.plist = plist;
+        this.objects =
+            plist["$objects"];
+
+        if (!Array.isArray(this.objects))
+        {
+            throw new Error(
+                "$objects absent ou invalide."
+            );
+        }
+
+        this.cache =
+            new Map();
+
+        this.resolving =
+            new Set();
+    }
+
+
+    resolveUID(uidObject)
+    {
+        if (!isUID(uidObject))
+        {
+            return uidObject;
+        }
+
+        const index =
+            uidObject.uid;
+
+        return this.resolveIndex(index);
+    }
+
+
+    resolveIndex(index)
+    {
+        if (
+            index < 0 ||
+            index >= this.objects.length
+        )
+        {
+            throw new Error(
+                "UID hors limites : " +
+                index
+            );
+        }
+
+        if (this.cache.has(index))
+        {
+            return this.cache.get(index);
+        }
+
+        if (this.resolving.has(index))
+        {
+            console.warn(
+                "Référence circulaire UID :",
+                index
+            );
+
+            return {
+                "$circularUID": index
+            };
+        }
+
+        const object =
+            this.objects[index];
+
+        // ----------------------------------------------------
+        // Objet nul NSKeyedArchiver
+        // ----------------------------------------------------
+
+        if (
+            object === "$null" ||
+            object === null
+        )
+        {
+            this.cache.set(
+                index,
+                null
+            );
+
+            return null;
+        }
+
+        this.resolving.add(index);
+
+        let result;
+
+        try
+        {
+            result =
+                this.resolveObject(
+                    object
+                );
+        }
+        finally
+        {
+            this.resolving.delete(index);
+        }
+
+        this.cache.set(
+            index,
+            result
+        );
+
+        return result;
+    }
+
+
+    resolveObject(object)
+    {
+        // ----------------------------------------------------
+        // UID
+        // ----------------------------------------------------
+
+        if (isUID(object))
+        {
+            return this.resolveIndex(
+                object.uid
+            );
+        }
+
+
+        // ----------------------------------------------------
+        // Tableau
+        // ----------------------------------------------------
+
+        if (Array.isArray(object))
+        {
+            return object.map(
+                value =>
+                    this.resolveObject(
+                        value
+                    )
+            );
+        }
+
+
+        // ----------------------------------------------------
+        // NSData / primitive / NSString
+        // ----------------------------------------------------
+
+        if (
+            object === null ||
+            typeof object !== "object"
+        )
+        {
+            return object;
+        }
+
+
+        // ----------------------------------------------------
+        // Dictionnaire
+        // ----------------------------------------------------
+
+        const result = {};
+
+        for (
+            const key of Object.keys(object)
+        )
+        {
+            result[key] =
+                this.resolveObject(
+                    object[key]
+                );
+        }
+
+        return result;
+    }
+
+
+    root()
+    {
+        const top =
+            this.plist["$top"];
+
+        if (!top)
+        {
+            throw new Error(
+                "$top absent."
+            );
+        }
+
+        const rootUID =
+            top["root"];
+
+        if (!rootUID)
+        {
+            throw new Error(
+                "root absent dans $top."
+            );
+        }
+
+        console.log(
+            "UID racine :",
+            rootUID.uid
+        );
+
+        return this.resolveUID(
+            rootUID
+        );
+    }
+
+
+    dumpObject(index, depth = 0)
+    {
+        const indent =
+            " ".repeat(depth * 2);
+
+        if (
+            index < 0 ||
+            index >= this.objects.length
+        )
+        {
+            console.log(
+                indent +
+                "UID invalide " +
+                index
+            );
+
+            return;
+        }
+
+        const object =
+            this.objects[index];
+
+        console.log(
+            indent +
+            "UID[" +
+            index +
+            "] :",
+            object
+        );
+
+        if (
+            object &&
+            typeof object === "object" &&
+            !Array.isArray(object)
+        )
+        {
+            if (object["$class"])
+            {
+                console.log(
+                    indent +
+                    "  $class :",
+                    object["$class"]
+                );
+            }
+
+            for (
+                const key of Object.keys(object)
+            )
+            {
+                if (
+                    key === "$class"
+                )
+                {
+                    continue;
+                }
+
+                const value =
+                    object[key];
+
+                if (isUID(value))
+                {
+                    console.log(
+                        indent +
+                        "  " +
+                        key +
+                        " -> UID " +
+                        value.uid
+                    );
+                }
+            }
+        }
+    }
+}
+
+// ============================================================
 // LECTURE FICHIER .GRILLE
 // ============================================================
 
@@ -1595,10 +1880,127 @@ console.log(
 
 try
 {
+    try
+{
     const archive =
         inspectKeyedArchive(
             decoded
         );
+
+    window.lastPlist =
+        archive.plist;
+
+    window.lastPlistDecoder =
+        archive.decoder;
+
+
+    // ========================================================
+    // NSKeyedArchiver
+    // ========================================================
+
+    const resolver =
+        new KeyedArchiveResolver(
+            archive.plist
+        );
+
+    window.lastArchiveResolver =
+        resolver;
+
+
+    console.log(
+        "================================"
+    );
+
+    console.log(
+        "NSKEYEDARCHIVER"
+    );
+
+    console.log(
+        "Nombre d'objets :",
+        archive.plist["$objects"].length
+    );
+
+
+    // --------------------------------------------------------
+    // Affichage de quelques objets
+    // --------------------------------------------------------
+
+    const objects =
+        archive.plist["$objects"];
+
+    for (
+        let i = 0;
+        i < Math.min(
+            objects.length,
+            20
+        );
+        i++
+    )
+    {
+        resolver.dumpObject(
+            i
+        );
+    }
+
+
+    // --------------------------------------------------------
+    // Résolution de la racine
+    // --------------------------------------------------------
+
+    const root =
+        resolver.root();
+
+    window.lastArchiveRoot =
+        root;
+
+
+    console.log(
+        "================================"
+    );
+
+    console.log(
+        "OBJET RACINE NSKEYEDARCHIVER :"
+    );
+
+    console.log(
+        root
+    );
+
+
+    if (
+        root &&
+        typeof root === "object"
+    )
+    {
+        console.log(
+            "Clés racine de l'objet archivé :",
+            Object.keys(root)
+        );
+    }
+
+
+    console.log(
+        "================================"
+    );
+
+    alert(
+        "NSKeyedArchiver décodé.\n\n" +
+        "Objets : " +
+        objects.length
+    );
+}
+catch (error)
+{
+    console.error(
+        "ERREUR NSKEYEDARCHIVER :",
+        error
+    );
+
+    alert(
+        "Erreur NSKeyedArchiver :\n" +
+        error.message
+    );
+}
 
     window.lastPlist =
         archive.plist;
