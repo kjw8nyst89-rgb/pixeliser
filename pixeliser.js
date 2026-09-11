@@ -537,7 +537,7 @@ async function decompressLZFSE(
             outputPath
         );
     }
-    catch (e)
+    catch (e){
     }
 
 
