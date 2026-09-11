@@ -654,6 +654,752 @@ async function decompressLZFSE(
     );
 }
 
+// ============================================================
+// BINARY PLIST / NSKeyedArchiver
+// ============================================================
+
+class BinaryPlistDecoder
+{
+    constructor(bytes)
+    {
+        this.bytes = bytes;
+        this.objects = [];
+        this.offsets = [];
+
+        this.objectRefSize = 0;
+        this.offsetIntSize = 0;
+        this.numObjects = 0;
+        this.topObject = 0;
+        this.offsetTableOffset = 0;
+    }
+
+    readUIntBE(offset, size)
+    {
+        let value = 0;
+
+        for (let i = 0; i < size; i++)
+        {
+            value =
+                value * 256 +
+                this.bytes[offset + i];
+        }
+
+        return value;
+    }
+
+    readUIntLE(offset, size)
+    {
+        let value = 0;
+
+        for (let i = size - 1; i >= 0; i--)
+        {
+            value =
+                value * 256 +
+                this.bytes[offset + i];
+        }
+
+        return value;
+    }
+
+    readDoubleBE(offset)
+    {
+        const buffer =
+            this.bytes.buffer.slice(
+                this.bytes.byteOffset + offset,
+                this.bytes.byteOffset + offset + 8
+            );
+
+        return new DataView(buffer).getFloat64(0, false);
+    }
+
+    decode()
+    {
+        if (this.bytes.length < 40)
+        {
+            throw new Error(
+                "Binary plist trop court."
+            );
+        }
+
+        const magic =
+            String.fromCharCode(
+                this.bytes[0],
+                this.bytes[1],
+                this.bytes[2],
+                this.bytes[3],
+                this.bytes[4],
+                this.bytes[5],
+                this.bytes[6],
+                this.bytes[7]
+            );
+
+        if (magic !== "bplist00")
+        {
+            throw new Error(
+                "Ce fichier n'est pas un binary plist."
+            );
+        }
+
+        const trailer =
+            this.bytes.length - 32;
+
+        this.offsetIntSize =
+            this.bytes[trailer + 6];
+
+        this.objectRefSize =
+            this.bytes[trailer + 7];
+
+        this.numObjects =
+            this.readUIntBE(
+                trailer + 8,
+                8
+            );
+
+        this.topObject =
+            this.readUIntBE(
+                trailer + 16,
+                8
+            );
+
+        this.offsetTableOffset =
+            this.readUIntBE(
+                trailer + 24,
+                8
+            );
+
+        console.log(
+            "Binary plist :",
+            {
+                offsetIntSize: this.offsetIntSize,
+                objectRefSize: this.objectRefSize,
+                numObjects: this.numObjects,
+                topObject: this.topObject,
+                offsetTableOffset: this.offsetTableOffset
+            }
+        );
+
+        // ----------------------------------------------------
+        // Table des offsets
+        // ----------------------------------------------------
+
+        this.offsets = new Array(
+            this.numObjects
+        );
+
+        for (
+            let i = 0;
+            i < this.numObjects;
+            i++
+        )
+        {
+            this.offsets[i] =
+                this.readUIntBE(
+                    this.offsetTableOffset +
+                    i * this.offsetIntSize,
+                    this.offsetIntSize
+                );
+        }
+
+        // ----------------------------------------------------
+        // Décodage des objets
+        // ----------------------------------------------------
+
+        this.objects = new Array(
+            this.numObjects
+        );
+
+        return this.decodeObject(
+            this.topObject
+        );
+    }
+
+    decodeObject(ref)
+    {
+        if (
+            ref < 0 ||
+            ref >= this.numObjects
+        )
+        {
+            throw new Error(
+                "Référence objet invalide : " +
+                ref
+            );
+        }
+
+        if (
+            this.objects[ref] !== undefined
+        )
+        {
+            return this.objects[ref];
+        }
+
+        const offset =
+            this.offsets[ref];
+
+        const marker =
+            this.bytes[offset];
+
+        const type =
+            marker >> 4;
+
+        const info =
+            marker & 0x0F;
+
+        let value;
+
+        switch (type)
+        {
+            case 0x0:
+                value =
+                    this.decodeSimple(
+                        info,
+                        offset
+                    );
+                break;
+
+            case 0x1:
+                value =
+                    this.decodeInteger(
+                        info,
+                        offset
+                    );
+                break;
+
+            case 0x2:
+                value =
+                    this.decodeReal(
+                        info,
+                        offset
+                    );
+                break;
+
+            case 0x3:
+                value =
+                    this.decodeDate(
+                        info,
+                        offset
+                    );
+                break;
+
+            case 0x4:
+                value =
+                    this.decodeData(
+                        info,
+                        offset
+                    );
+                break;
+
+            case 0x5:
+                value =
+                    this.decodeASCII(
+                        info,
+                        offset
+                    );
+                break;
+
+            case 0x6:
+                value =
+                    this.decodeUTF16(
+                        info,
+                        offset
+                    );
+                break;
+
+            case 0x8:
+                value =
+                    this.decodeUID(
+                        info,
+                        offset
+                    );
+                break;
+
+            case 0xA:
+                value =
+                    this.decodeArray(
+                        info,
+                        offset
+                    );
+                break;
+
+            case 0xD:
+                value =
+                    this.decodeDictionary(
+                        info,
+                        offset
+                    );
+                break;
+
+            default:
+
+                throw new Error(
+                    "Type plist inconnu : 0x" +
+                    type.toString(16) +
+                    " objet " +
+                    ref +
+                    " offset " +
+                    offset
+                );
+        }
+
+        this.objects[ref] = value;
+
+        return value;
+    }
+
+    decodeLength(info, offset)
+    {
+        if (info < 0x0F)
+        {
+            return {
+                length: info,
+                offset: offset + 1
+            };
+        }
+
+        const marker =
+            this.bytes[offset + 1];
+
+        const type =
+            marker >> 4;
+
+        const integerInfo =
+            marker & 0x0F;
+
+        if (type !== 0x1)
+        {
+            throw new Error(
+                "Longueur plist invalide."
+            );
+        }
+
+        const byteCount =
+            1 << integerInfo;
+
+        const length =
+            this.readUIntBE(
+                offset + 2,
+                byteCount
+            );
+
+        return {
+            length: length,
+            offset: offset + 2 + byteCount
+        };
+    }
+
+    decodeSimple(info, offset)
+    {
+        switch (info)
+        {
+            case 0x0:
+                return null;
+
+            case 0x8:
+                return false;
+
+            case 0x9:
+                return true;
+
+            default:
+                return {
+                    plistSimple: info
+                };
+        }
+    }
+
+    decodeInteger(info, offset)
+    {
+        const byteCount =
+            1 << info;
+
+        const value =
+            this.readUIntBE(
+                offset + 1,
+                byteCount
+            );
+
+        return value;
+    }
+
+    decodeReal(info, offset)
+    {
+        const byteCount =
+            1 << info;
+
+        if (byteCount === 4)
+        {
+            const buffer =
+                this.bytes.buffer.slice(
+                    this.bytes.byteOffset +
+                    offset + 1,
+                    this.bytes.byteOffset +
+                    offset + 5
+                );
+
+            return new DataView(buffer)
+                .getFloat32(0, false);
+        }
+
+        if (byteCount === 8)
+        {
+            return this.readDoubleBE(
+                offset + 1
+            );
+        }
+
+        throw new Error(
+            "REAL plist non supporté."
+        );
+    }
+
+    decodeDate(info, offset)
+    {
+        if (info !== 0x3)
+        {
+            throw new Error(
+                "DATE plist invalide."
+            );
+        }
+
+        return this.readDoubleBE(
+            offset + 1
+        );
+    }
+
+    decodeData(info, offset)
+    {
+        const result =
+            this.decodeLength(
+                info,
+                offset
+            );
+
+        const start =
+            result.offset;
+
+        const end =
+            start + result.length;
+
+        return this.bytes.slice(
+            start,
+            end
+        );
+    }
+
+    decodeASCII(info, offset)
+    {
+        const result =
+            this.decodeLength(
+                info,
+                offset
+            );
+
+        const start =
+            result.offset;
+
+        const end =
+            start + result.length;
+
+        let text = "";
+
+        for (
+            let i = start;
+            i < end;
+            i++
+        )
+        {
+            text += String.fromCharCode(
+                this.bytes[i]
+            );
+        }
+
+        return text;
+    }
+
+    decodeUTF16(info, offset)
+    {
+        const result =
+            this.decodeLength(
+                info,
+                offset
+            );
+
+        const start =
+            result.offset;
+
+        const count =
+            result.length;
+
+        const end =
+            start + count * 2;
+
+        let text = "";
+
+        for (
+            let i = start;
+            i < end;
+            i += 2
+        )
+        {
+            const code =
+                (this.bytes[i] << 8) |
+                this.bytes[i + 1];
+
+            text += String.fromCharCode(
+                code
+            );
+        }
+
+        return text;
+    }
+
+    decodeUID(info, offset)
+    {
+        const length =
+            info + 1;
+
+        let value = 0;
+
+        for (
+            let i = 0;
+            i < length;
+            i++
+        )
+        {
+            value =
+                value * 256 +
+                this.bytes[offset + 1 + i];
+        }
+
+        return {
+            uid: value
+        };
+    }
+
+    decodeArray(info, offset)
+    {
+        const result =
+            this.decodeLength(
+                info,
+                offset
+            );
+
+        const count =
+            result.length;
+
+        let pos =
+            result.offset;
+
+        const array =
+            new Array(count);
+
+        for (
+            let i = 0;
+            i < count;
+            i++
+        )
+        {
+            const ref =
+                this.readUIntBE(
+                    pos,
+                    this.objectRefSize
+                );
+
+            pos +=
+                this.objectRefSize;
+
+            array[i] =
+                this.decodeObject(ref);
+        }
+
+        return array;
+    }
+
+    decodeDictionary(info, offset)
+    {
+        const result =
+            this.decodeLength(
+                info,
+                offset
+            );
+
+        const count =
+            result.length;
+
+        let pos =
+            result.offset;
+
+        const keyRefs =
+            new Array(count);
+
+        const valueRefs =
+            new Array(count);
+
+        for (
+            let i = 0;
+            i < count;
+            i++
+        )
+        {
+            keyRefs[i] =
+                this.readUIntBE(
+                    pos,
+                    this.objectRefSize
+                );
+
+            pos +=
+                this.objectRefSize;
+        }
+
+        for (
+            let i = 0;
+            i < count;
+            i++
+        )
+        {
+            valueRefs[i] =
+                this.readUIntBE(
+                    pos,
+                    this.objectRefSize
+                );
+
+            pos +=
+                this.objectRefSize;
+        }
+
+        const dictionary = {};
+
+        for (
+            let i = 0;
+            i < count;
+            i++
+        )
+        {
+            const key =
+                this.decodeObject(
+                    keyRefs[i]
+                );
+
+            const value =
+                this.decodeObject(
+                    valueRefs[i]
+                );
+
+            dictionary[key] =
+                value;
+        }
+
+        return dictionary;
+    }
+}
+
+
+// ============================================================
+// OUTILS NSKEYEDARCHIVER
+// ============================================================
+
+function isUID(value)
+{
+    return (
+        value &&
+        typeof value === "object" &&
+        Object.prototype.hasOwnProperty.call(
+            value,
+            "uid"
+        )
+    );
+}
+
+
+function findArchiveRoot(plist)
+{
+    console.log(
+        "Recherche de $top..."
+    );
+
+    if (
+        !plist ||
+        typeof plist !== "object"
+    )
+    {
+        throw new Error(
+            "Plist racine invalide."
+        );
+    }
+
+    console.log(
+        "Clés plist racine :",
+        Object.keys(plist)
+    );
+
+    const top =
+        plist["$top"];
+
+    if (!top)
+    {
+        throw new Error(
+            "$top absent du NSKeyedArchiver."
+        );
+    }
+
+    console.log(
+        "$top :",
+        top
+    );
+
+    return top;
+}
+
+
+function inspectKeyedArchive(bytes)
+{
+    console.log(
+        "================================"
+    );
+
+    console.log(
+        "DECODAGE BINARY PLIST"
+    );
+
+    console.log(
+        "Taille :",
+        bytes.length
+    );
+
+    const decoder =
+        new BinaryPlistDecoder(bytes);
+
+    const plist =
+        decoder.decode();
+
+    console.log(
+        "Plist décodé :",
+        plist
+    );
+
+    console.log(
+        "Clés racine :",
+        Object.keys(plist)
+    );
+
+    const top =
+        findArchiveRoot(plist);
+
+    console.log(
+        "$top décodé :",
+        top
+    );
+
+    console.log(
+        "================================"
+    );
+
+    return {
+        plist: plist,
+        top: top,
+        decoder: decoder
+    };
+}
 
 // ============================================================
 // LECTURE FICHIER .GRILLE
@@ -833,15 +1579,65 @@ async function loadGrilleFile(file)
     // Conservation temporaire
     // --------------------------------------------------------
 
-    window.lastDecodedGrille =
-        decoded;
+   window.lastDecodedGrille =
+    decoded;
 
+console.log(
+    "window.lastDecodedGrille disponible :",
+    decoded.length,
+    "octets"
+);
+
+
+// ============================================================
+// TEST BINARY PLIST
+// ============================================================
+
+try
+{
+    const archive =
+        inspectKeyedArchive(
+            decoded
+        );
+
+    window.lastPlist =
+        archive.plist;
+
+    window.lastArchiveTop =
+        archive.top;
+
+    window.lastPlistDecoder =
+        archive.decoder;
 
     console.log(
-        "window.lastDecodedGrille disponible :",
-        decoded.length,
-        "octets"
+        "Binary plist correctement décodé."
     );
+
+    console.log(
+        "Objet $top :",
+        archive.top
+    );
+
+    alert(
+        "Binary plist décodé.\n\n" +
+        "Clés : " +
+        Object.keys(
+            archive.plist
+        ).join(", ")
+    );
+}
+catch (error)
+{
+    console.error(
+        "ERREUR DECODAGE BINARY PLIST :",
+        error
+    );
+
+    alert(
+        "Erreur décodage binary plist :\n" +
+        error.message
+    );
+}
 
 
     // --------------------------------------------------------
