@@ -36,6 +36,50 @@ const info =
 
 
 /* --------------------------------------------------
+   Éléments .grille
+   -------------------------------------------------- */
+
+const openGrilleButton =
+    document.getElementById("openGrilleButton");
+
+const grilleInput =
+    document.getElementById("grilleInput");
+
+
+/* --------------------------------------------------
+   Vérification HTML
+   -------------------------------------------------- */
+
+if (!canvas) {
+    console.error("ERREUR : #canvas introuvable");
+}
+
+if (!workspace) {
+    console.error("ERREUR : #workspace introuvable");
+}
+
+if (!openButton) {
+    console.error("ERREUR : #openButton introuvable");
+}
+
+if (!imageInput) {
+    console.error("ERREUR : #imageInput introuvable");
+}
+
+if (!openGrilleButton) {
+    console.error(
+        "ERREUR : #openGrilleButton introuvable"
+    );
+}
+
+if (!grilleInput) {
+    console.error(
+        "ERREUR : #grilleInput introuvable"
+    );
+}
+
+
+/* --------------------------------------------------
    Image
    -------------------------------------------------- */
 
@@ -80,195 +124,337 @@ let pinchStartDistance = 0;
 let pinchStartZoom = 1;
 
 
-/* --------------------------------------------------
-   Ouverture image
-   -------------------------------------------------- */
+/* ==================================================
+   OUVERTURE D'UNE IMAGE
+   ================================================== */
 
-openButton.addEventListener(
-    "click",
-    () => {
+if (openButton && imageInput) {
 
-        imageInput.click();
+    openButton.addEventListener(
+        "click",
+        () => {
 
-    }
-);
+            console.log(
+                "CLICK : Ouvrir une image"
+            );
+
+            imageInput.value = "";
+
+            imageInput.click();
+
+        }
+    );
 
 
-imageInput.addEventListener(
-    "change",
-    event => {
+    imageInput.addEventListener(
+        "change",
+        event => {
 
-        const file =
-            event.target.files[0];
+            const file =
+                event.target.files[0];
 
-        if (!file)
-            return;
+            if (!file) {
+                return;
+            }
 
-        const url =
-            URL.createObjectURL(file);
 
-        const img =
-            new Image();
+            console.log(
+                "Image sélectionnée :",
+                file.name,
+                file.size,
+                file.type
+            );
 
-        img.onload = () => {
 
-            sourceImage = img;
+            const url =
+                URL.createObjectURL(file);
 
-            imageWidth =
-                img.naturalWidth;
 
-            imageHeight =
-                img.naturalHeight;
+            const img =
+                new Image();
 
-            URL.revokeObjectURL(url);
+
+            img.onload = () => {
+
+                sourceImage = img;
+
+                imageWidth =
+                    img.naturalWidth;
+
+                imageHeight =
+                    img.naturalHeight;
+
+
+                URL.revokeObjectURL(url);
+
+
+                checkedTiles.clear();
+
+
+                recomputeGrid();
+
+                resetView();
+
+                updateInfo();
+
+                draw();
+
+            };
+
+
+            img.onerror = () => {
+
+                console.error(
+                    "Impossible de charger l'image"
+                );
+
+                URL.revokeObjectURL(url);
+
+                info.textContent =
+                    "Erreur de chargement";
+
+            };
+
+
+            img.src = url;
+
+        }
+    );
+
+}
+
+
+/* ==================================================
+   OUVERTURE D'UNE GRILLE
+   ================================================== */
+
+if (openGrilleButton && grilleInput) {
+
+    openGrilleButton.addEventListener(
+        "click",
+        () => {
+
+            console.log(
+                "CLICK : Ouvrir une grille"
+            );
+
+
+            /*
+             * Important sur iPad :
+             *
+             * remettre value à vide permet de
+             * sélectionner à nouveau le même fichier.
+             */
+
+            grilleInput.value = "";
+
+
+            grilleInput.click();
+
+        }
+    );
+
+
+    grilleInput.addEventListener(
+        "change",
+        event => {
+
+            const file =
+                event.target.files[0];
+
+
+            if (!file) {
+
+                console.log(
+                    "Aucun fichier .grille sélectionné"
+                );
+
+                return;
+
+            }
+
+
+            console.log(
+                "================================"
+            );
+
+            console.log(
+                "FICHIER GRILLE SÉLECTIONNÉ"
+            );
+
+            console.log(
+                "Nom   :",
+                file.name
+            );
+
+            console.log(
+                "Taille:",
+                file.size
+            );
+
+            console.log(
+                "Type  :",
+                file.type
+            );
+
+            console.log(
+                "================================"
+            );
+
+
+            info.textContent =
+                `Grille : ${file.name}`;
+
+
+            /*
+             * Pour l'instant nous ne décodons
+             * pas encore le fichier.
+             *
+             * La prochaine étape sera :
+             *
+             * .grille
+             *   ↓
+             * 8 octets taille originale
+             *   ↓
+             * données LZFSE
+             *   ↓
+             * archive
+             *   ↓
+             * GRILLE
+             * COULEUR
+             * PALETTE
+             * ENCOURS
+             * TILESIZE
+             */
+
+        }
+    );
+
+}
+
+
+/* ==================================================
+   TAILLE DES CASES
+   ================================================== */
+
+if (tileSizeInput) {
+
+    tileSizeInput.addEventListener(
+        "change",
+        () => {
+
+            let value =
+                parseInt(
+                    tileSizeInput.value,
+                    10
+                );
+
+
+            if (!Number.isFinite(value)) {
+
+                value = 20;
+
+            }
+
+
+            value =
+                Math.max(
+                    2,
+                    Math.min(
+                        100,
+                        value
+                    )
+                );
+
+
+            tileSize =
+                value;
+
+
+            tileSizeInput.value =
+                tileSize;
+
 
             checkedTiles.clear();
 
-            recomputeGrid();
 
-            resetView();
+            recomputeGrid();
 
             updateInfo();
 
             draw();
 
-        };
+        }
+    );
 
-        img.src = url;
-
-    }
-);
-
-const openGrilleButton =
-    document.getElementById("openGrilleButton");
-
-const grilleInput =
-    document.getElementById("grilleInput");
+}
 
 
-openGrilleButton.addEventListener(
-    "click",
-    () => {
-        grilleInput.click();
-    }
-);
-
-
-grilleInput.addEventListener(
-    "change",
-    event => {
-
-        const file =
-            event.target.files[0];
-
-        if (!file)
-            return;
-
-        console.log(
-            "Fichier grille sélectionné :",
-            file.name,
-            file.size,
-            file.type
-        );
-
-        info.textContent =
-            `Grille : ${file.name}`;
-
-    }
-);
-/* --------------------------------------------------
-   Taille des cases
-   -------------------------------------------------- */
-
-tileSizeInput.addEventListener(
-    "change",
-    () => {
-
-        let value =
-            parseInt(
-                tileSizeInput.value,
-                10
-            );
-
-        if (!Number.isFinite(value))
-            value = 20;
-
-        value =
-            Math.max(
-                2,
-                Math.min(100, value)
-            );
-
-        tileSize = value;
-
-        tileSizeInput.value =
-            tileSize;
-
-        checkedTiles.clear();
-
-        recomputeGrid();
-
-        updateInfo();
-
-        draw();
-
-    }
-);
-
-
-/* --------------------------------------------------
-   Grille
-   -------------------------------------------------- */
+/* ==================================================
+   GRILLE
+   ================================================== */
 
 function recomputeGrid() {
 
-    if (!sourceImage)
+    if (!sourceImage) {
         return;
+    }
+
 
     cols =
         Math.ceil(
-            imageWidth / tileSize
+            imageWidth /
+            tileSize
         );
+
 
     rows =
         Math.ceil(
-            imageHeight / tileSize
+            imageHeight /
+            tileSize
         );
 
 }
 
 
-/* --------------------------------------------------
-   Réinitialisation de la vue
-   -------------------------------------------------- */
+/* ==================================================
+   RÉINITIALISATION DE LA VUE
+   ================================================== */
 
 function resetView() {
 
     zoom = 1;
 
-    /*
-     * On centre l'image dans la zone
-     * disponible.
-     */
 
     const w =
-        imageWidth * zoom;
+        imageWidth *
+        zoom;
+
 
     const h =
-        imageHeight * zoom;
+        imageHeight *
+        zoom;
+
 
     offsetX =
-        (workspace.clientWidth - w) / 2;
+        (
+            workspace.clientWidth -
+            w
+        ) / 2;
+
 
     offsetY =
-        (workspace.clientHeight - h) / 2;
+        (
+            workspace.clientHeight -
+            h
+        ) / 2;
 
 }
 
 
-/* --------------------------------------------------
-   Information
-   -------------------------------------------------- */
+/* ==================================================
+   INFORMATIONS
+   ================================================== */
 
 function updateInfo() {
 
@@ -278,7 +464,9 @@ function updateInfo() {
             "Aucune image";
 
         return;
+
     }
+
 
     info.textContent =
         `${imageWidth} × ${imageHeight} — ` +
@@ -288,49 +476,72 @@ function updateInfo() {
 }
 
 
-/* --------------------------------------------------
-   Dessin
-   -------------------------------------------------- */
+/* ==================================================
+   DESSIN
+   ================================================== */
 
 function draw() {
 
+    if (!canvas || !workspace) {
+        return;
+    }
+
+
     const width =
         workspace.clientWidth;
+
 
     const height =
         workspace.clientHeight;
 
 
+    /*
+     * Taille réelle du canvas.
+     */
+
     canvas.width =
-        width;
+        Math.max(
+            1,
+            width
+        );
+
 
     canvas.height =
-        height;
+        Math.max(
+            1,
+            height
+        );
 
 
     ctx.clearRect(
         0,
         0,
-        width,
-        height
+        canvas.width,
+        canvas.height
     );
 
 
-    if (!sourceImage)
+    if (!sourceImage) {
         return;
+    }
 
 
     ctx.save();
 
 
     /*
-     * Transformation image → écran
+     * Transformation :
+     *
+     * coordonnées image
+     *        ↓
+     * coordonnées écran
      */
 
     ctx.translate(
         offsetX,
         offsetY
     );
+
 
     ctx.scale(
         zoom,
@@ -368,15 +579,11 @@ function draw() {
 }
 
 
-/* --------------------------------------------------
-   Cases sélectionnées
-   -------------------------------------------------- */
+/* ==================================================
+   CASES SÉLECTIONNÉES
+   ================================================== */
 
 function drawCheckedTiles() {
-
-    /*
-     * On utilise une couleur semi-transparente.
-     */
 
     ctx.fillStyle =
         "rgba(255, 60, 60, 0.35)";
@@ -386,17 +593,23 @@ function drawCheckedTiles() {
         index => {
 
             const row =
-                Math.floor(index / cols);
+                Math.floor(
+                    index / cols
+                );
+
 
             const col =
                 index % cols;
 
 
             const x =
-                col * tileSize;
+                col *
+                tileSize;
+
 
             const y =
-                row * tileSize;
+                row *
+                tileSize;
 
 
             const w =
@@ -405,11 +618,17 @@ function drawCheckedTiles() {
                     imageWidth - x
                 );
 
+
             const h =
                 Math.min(
                     tileSize,
                     imageHeight - y
                 );
+
+
+            if (w <= 0 || h <= 0) {
+                return;
+            }
 
 
             ctx.fillRect(
@@ -425,11 +644,16 @@ function drawCheckedTiles() {
 }
 
 
-/* --------------------------------------------------
-   Grille
-   -------------------------------------------------- */
+/* ==================================================
+   GRILLE
+   ================================================== */
 
 function drawGrid() {
+
+    if (cols <= 0 || rows <= 0) {
+        return;
+    }
+
 
     ctx.beginPath();
 
@@ -445,16 +669,20 @@ function drawGrid() {
     ) {
 
         const x =
-            col * tileSize;
+            col *
+            tileSize;
+
 
         ctx.moveTo(
             x,
             0
         );
 
+
         ctx.lineTo(
             x,
-            rows * tileSize
+            rows *
+            tileSize
         );
 
     }
@@ -471,15 +699,19 @@ function drawGrid() {
     ) {
 
         const y =
-            row * tileSize;
+            row *
+            tileSize;
+
 
         ctx.moveTo(
             0,
             y
         );
 
+
         ctx.lineTo(
-            cols * tileSize,
+            cols *
+            tileSize,
             y
         );
 
@@ -487,19 +719,22 @@ function drawGrid() {
 
 
     ctx.lineWidth =
-        1 / zoom;
+        1 /
+        zoom;
+
 
     ctx.strokeStyle =
         "rgba(0, 0, 0, 0.35)";
+
 
     ctx.stroke();
 
 }
 
 
-/* --------------------------------------------------
-   Conversion écran → image
-   -------------------------------------------------- */
+/* ==================================================
+   CONVERSION ÉCRAN → IMAGE
+   ================================================== */
 
 function imagePointFromScreen(
     screenX,
@@ -509,29 +744,37 @@ function imagePointFromScreen(
     return {
 
         x:
-            (screenX - offsetX)
-            / zoom,
+            (
+                screenX -
+                offsetX
+            ) /
+            zoom,
+
 
         y:
-            (screenY - offsetY)
-            / zoom
+            (
+                screenY -
+                offsetY
+            ) /
+            zoom
 
     };
 
 }
 
 
-/* --------------------------------------------------
-   Recherche d'une case
-   -------------------------------------------------- */
+/* ==================================================
+   RECHERCHE D'UNE CASE
+   ================================================== */
 
 function tileAtScreenPoint(
     screenX,
     screenY
 ) {
 
-    if (!sourceImage)
+    if (!sourceImage) {
         return -1;
+    }
 
 
     const point =
@@ -543,12 +786,15 @@ function tileAtScreenPoint(
 
     const col =
         Math.floor(
-            point.x / tileSize
+            point.x /
+            tileSize
         );
+
 
     const row =
         Math.floor(
-            point.y / tileSize
+            point.y /
+            tileSize
         );
 
 
@@ -564,14 +810,18 @@ function tileAtScreenPoint(
     }
 
 
-    return row * cols + col;
+    return (
+        row *
+        cols +
+        col
+    );
 
 }
 
 
-/* --------------------------------------------------
-   Sélection d'une case
-   -------------------------------------------------- */
+/* ==================================================
+   SÉLECTION D'UNE CASE
+   ================================================== */
 
 function toggleTile(
     screenX,
@@ -585,18 +835,27 @@ function toggleTile(
         );
 
 
-    if (index < 0)
+    if (index < 0) {
         return;
+    }
 
 
-    if (checkedTiles.has(index)) {
+    if (
+        checkedTiles.has(
+            index
+        )
+    ) {
 
-        checkedTiles.delete(index);
+        checkedTiles.delete(
+            index
+        );
 
     }
     else {
 
-        checkedTiles.add(index);
+        checkedTiles.add(
+            index
+        );
 
     }
 
@@ -608,22 +867,26 @@ function toggleTile(
 }
 
 
-/* --------------------------------------------------
-   Effacer
-   -------------------------------------------------- */
+/* ==================================================
+   EFFACER
+   ================================================== */
 
-clearButton.addEventListener(
-    "click",
-    () => {
+if (clearButton) {
 
-        checkedTiles.clear();
+    clearButton.addEventListener(
+        "click",
+        () => {
 
-        updateInfo();
+            checkedTiles.clear();
 
-        draw();
+            updateInfo();
 
-    }
-);
+            draw();
+
+        }
+    );
+
+}
 
 
 /* ==================================================
@@ -655,6 +918,7 @@ canvas.addEventListener(
 
         /*
          * Un seul doigt :
+         *
          * sélection d'une case.
          */
 
@@ -665,8 +929,10 @@ canvas.addEventListener(
                 event.clientY
             );
 
+
             lastPointerX =
                 event.clientX;
+
 
             lastPointerY =
                 event.clientY;
@@ -676,6 +942,7 @@ canvas.addEventListener(
 
         /*
          * Deux doigts :
+         *
          * début du zoom.
          */
 
@@ -683,6 +950,7 @@ canvas.addEventListener(
 
             pinchStartDistance =
                 pointerDistance();
+
 
             pinchStartZoom =
                 zoom;
@@ -701,8 +969,15 @@ canvas.addEventListener(
     "pointermove",
     event => {
 
-        if (!pointers.has(event.pointerId))
+        if (
+            !pointers.has(
+                event.pointerId
+            )
+        ) {
+
             return;
+
+        }
 
 
         pointers.set(
@@ -716,6 +991,7 @@ canvas.addEventListener(
 
         /*
          * Deux doigts :
+         *
          * zoom.
          */
 
@@ -725,7 +1001,9 @@ canvas.addEventListener(
                 pointerDistance();
 
 
-            if (pinchStartDistance > 0) {
+            if (
+                pinchStartDistance > 0
+            ) {
 
                 const factor =
                     distance /
@@ -740,13 +1018,17 @@ canvas.addEventListener(
                 zoom =
                     Math.max(
                         0.1,
-                        Math.min(10, zoom)
+                        Math.min(
+                            10,
+                            zoom
+                        )
                     );
 
 
                 draw();
 
             }
+
 
             return;
 
@@ -755,11 +1037,9 @@ canvas.addEventListener(
 
         /*
          * Un doigt :
-         * déplacement.
          *
-         * Pour l'instant nous ne faisons
-         * pas encore de déplacement avec
-         * un doigt.
+         * pas de déplacement pour
+         * le moment.
          */
 
     }
@@ -779,7 +1059,9 @@ canvas.addEventListener(
         );
 
 
-        if (pointers.size < 2) {
+        if (
+            pointers.size < 2
+        ) {
 
             pinchStartDistance = 0;
 
@@ -789,6 +1071,10 @@ canvas.addEventListener(
 );
 
 
+/* --------------------------------------------------
+   Pointer Cancel
+   -------------------------------------------------- */
+
 canvas.addEventListener(
     "pointercancel",
     event => {
@@ -797,13 +1083,22 @@ canvas.addEventListener(
             event.pointerId
         );
 
+
+        if (
+            pointers.size < 2
+        ) {
+
+            pinchStartDistance = 0;
+
+        }
+
     }
 );
 
 
-/* --------------------------------------------------
-   Distance entre les deux doigts
-   -------------------------------------------------- */
+/* ==================================================
+   DISTANCE ENTRE LES DEUX DOIGTS
+   ================================================== */
 
 function pointerDistance() {
 
@@ -813,13 +1108,19 @@ function pointerDistance() {
         );
 
 
-    if (values.length < 2)
+    if (
+        values.length < 2
+    ) {
+
         return 0;
+
+    }
 
 
     const dx =
         values[0].x -
         values[1].x;
+
 
     const dy =
         values[0].y -
@@ -834,9 +1135,9 @@ function pointerDistance() {
 }
 
 
-/* --------------------------------------------------
-   Resize écran
-   -------------------------------------------------- */
+/* ==================================================
+   RESIZE ÉCRAN
+   ================================================== */
 
 window.addEventListener(
     "resize",
@@ -848,8 +1149,8 @@ window.addEventListener(
 );
 
 
-/* --------------------------------------------------
-   Dessin initial
-   -------------------------------------------------- */
+/* ==================================================
+   DESSIN INITIAL
+   ================================================== */
 
 draw();
