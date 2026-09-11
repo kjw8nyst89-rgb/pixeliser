@@ -139,7 +139,43 @@ imageInput.addEventListener(
     }
 );
 
+const openGrilleButton =
+    document.getElementById("openGrilleButton");
 
+const grilleInput =
+    document.getElementById("grilleInput");
+
+
+openGrilleButton.addEventListener(
+    "click",
+    () => {
+        grilleInput.click();
+    }
+);
+
+
+grilleInput.addEventListener(
+    "change",
+    event => {
+
+        const file =
+            event.target.files[0];
+
+        if (!file)
+            return;
+
+        console.log(
+            "Fichier grille sélectionné :",
+            file.name,
+            file.size,
+            file.type
+        );
+
+        info.textContent =
+            `Grille : ${file.name}`;
+
+    }
+);
 /* --------------------------------------------------
    Taille des cases
    -------------------------------------------------- */
