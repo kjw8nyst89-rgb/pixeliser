@@ -73,7 +73,7 @@ async function initializeLZFSE() {
 
         lzfseModule =
             await createLZFSEModule();
-console.log("LZFSE prêt");
+      console.log("LZFSE prêt");
 console.log("Module :", lzfseModule);
 console.log("HEAPU8 :", lzfseModule.HEAPU8);
 console.log("malloc :", lzfseModule._malloc);
