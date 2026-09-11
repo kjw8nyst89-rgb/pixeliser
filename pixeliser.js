@@ -78,6 +78,7 @@ async function initializeLZFSE() {
         console.log("HEAPU8 :", module.HEAPU8);
         console.log("HEAP8 :", module.HEAP8);
         console.log("wasmMemory :", module.wasmMemory);
+       console.log( "decode_lzfse_file :", lzfseModule._decode_lzfse_file);
 
         lzfseModule = module;
 
@@ -512,11 +513,12 @@ async function loadGrilleFile(file) {
     );
 
 
-    const decodedSize =
-        lzfseModule._decode_lzfse_file(
-            inputPath,
-            outputPath
-        );
+   const decodedSize =
+    lzfseModule._decode_lzfse_file(
+        inputPath,
+        outputPath,
+        originalSize
+    );
 
 
     console.log(
