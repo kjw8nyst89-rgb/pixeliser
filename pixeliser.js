@@ -75,7 +75,7 @@ async function initializeLZFSE() {
 document.addEventListener("DOMContentLoaded", () => {
 
     canvas =
-        document.getElementById("gridCanvas");
+        document.getElementById("canvas");
 
     ctx =
         canvas.getContext("2d");
