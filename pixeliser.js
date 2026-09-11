@@ -47,50 +47,33 @@ async function initializeLZFSE()
             module
         );
 
-
         console.log(
-            "lzfse_malloc :",
-            typeof module._lzfse_malloc
+            "decode_lzfse_memfs :",
+            typeof module._decode_lzfse_memfs
         );
-
-        console.log(
-            "lzfse_free :",
-            typeof module._lzfse_free
-        );
-
-        console.log(
-            "lzfse_copy_to_wasm :",
-            typeof module._lzfse_copy_to_wasm
-        );
-
-        console.log(
-            "lzfse_read_byte :",
-            typeof module._lzfse_read_byte
-        );
-
-        console.log(
-            "decode_lzfse_buffer :",
-            typeof module._decode_lzfse_buffer
-        );
-
 
         if (
-            typeof module._lzfse_malloc !== "function" ||
-            typeof module._lzfse_free !== "function" ||
-            typeof module._lzfse_copy_to_wasm !== "function" ||
-            typeof module._lzfse_read_byte !== "function" ||
-            typeof module._decode_lzfse_buffer !== "function"
+            typeof module._decode_lzfse_memfs !==
+            "function"
         )
         {
             throw new Error(
-                "Une fonction LZFSE n'est pas disponible dans le module WASM."
+                "_decode_lzfse_memfs n'est pas disponible."
             );
         }
 
+        if (!module.FS)
+        {
+            throw new Error(
+                "Le système de fichiers MEMFS n'est pas disponible."
+            );
+        }
 
         lzfseModule = module;
 
-        console.log("LZFSE prêt");
+        console.log(
+            "LZFSE prêt"
+        );
     }
     catch (error)
     {
@@ -105,7 +88,7 @@ async function initializeLZFSE()
 
 
 // ============================================================
-// UTILITAIRE : distance entre deux touches
+// DISTANCE ENTRE DEUX TOUCHES
 // ============================================================
 
 function touchDistance(touch1, touch2)
@@ -126,7 +109,7 @@ function touchDistance(touch1, touch2)
 
 
 // ============================================================
-// UTILITAIRE : position dans le canvas
+// POSITION DANS LE CANVAS
 // ============================================================
 
 function canvasPointFromEvent(event)
@@ -155,7 +138,6 @@ function recomputeGrid()
     if (!sourceImage)
         return;
 
-
     cols =
         Math.ceil(
             sourceImage.naturalWidth /
@@ -168,13 +150,11 @@ function recomputeGrid()
             tileSize
         );
 
-
     canvas.width =
         cols * tileSize;
 
     canvas.height =
         rows * tileSize;
-
 
     updateCanvasSize();
 
@@ -192,7 +172,6 @@ function updateCanvasSize()
 {
     if (!canvas)
         return;
-
 
     canvas.style.width =
         (canvas.width * zoomFactor) +
@@ -213,7 +192,6 @@ function draw()
     if (!canvas || !ctx)
         return;
 
-
     ctx.setTransform(
         1,
         0,
@@ -230,6 +208,10 @@ function draw()
         canvas.height
     );
 
+
+    // --------------------------------------------------------
+    // Image
+    // --------------------------------------------------------
 
     if (sourceImage)
     {
@@ -254,15 +236,15 @@ function draw()
     ctx.fillStyle =
         "rgba(255, 0, 0, 0.5)";
 
-
     for (const index of selectedTiles)
     {
         const col =
             index % cols;
 
         const row =
-            Math.floor(index / cols);
-
+            Math.floor(
+                index / cols
+            );
 
         ctx.fillRect(
             col * tileSize,
@@ -271,7 +253,6 @@ function draw()
             tileSize
         );
     }
-
 
     ctx.restore();
 
@@ -325,7 +306,6 @@ function draw()
             ctx.stroke();
         }
 
-
         ctx.restore();
     }
 }
@@ -338,11 +318,12 @@ function draw()
 function updateInfo()
 {
     const info =
-        document.getElementById("info");
+        document.getElementById(
+            "info"
+        );
 
     if (!info)
         return;
-
 
     if (!sourceImage)
     {
@@ -351,7 +332,6 @@ function updateInfo()
 
         return;
     }
-
 
     info.textContent =
         `${sourceImage.naturalWidth} × ` +
@@ -370,20 +350,16 @@ function loadImageFile(file)
     if (!file)
         return;
 
-
     console.log(
         "Ouverture image :",
         file.name
     );
 
-
     const url =
         URL.createObjectURL(file);
 
-
     const image =
         new Image();
-
 
     image.onload = () =>
     {
@@ -396,7 +372,6 @@ function loadImageFile(file)
         recomputeGrid();
     };
 
-
     image.onerror = () =>
     {
         URL.revokeObjectURL(url);
@@ -406,23 +381,25 @@ function loadImageFile(file)
         );
     };
 
-
     image.src = url;
 }
 
 
 // ============================================================
-// CASE À PARTIR D'UN POINT
+// INDEX D'UNE CASE
 // ============================================================
 
 function tileIndexFromPoint(x, y)
 {
     const col =
-        Math.floor(x / tileSize);
+        Math.floor(
+            x / tileSize
+        );
 
     const row =
-        Math.floor(y / tileSize);
-
+        Math.floor(
+            y / tileSize
+        );
 
     if (
         col < 0 ||
@@ -433,7 +410,6 @@ function tileIndexFromPoint(x, y)
     {
         return -1;
     }
-
 
     return row * cols + col;
 }
@@ -446,12 +422,13 @@ function tileIndexFromPoint(x, y)
 function toggleTileAtPoint(x, y)
 {
     const index =
-        tileIndexFromPoint(x, y);
-
+        tileIndexFromPoint(
+            x,
+            y
+        );
 
     if (index < 0)
         return;
-
 
     if (selectedTiles.has(index))
     {
@@ -461,7 +438,6 @@ function toggleTileAtPoint(x, y)
     {
         selectedTiles.add(index);
     }
-
 
     draw();
 
@@ -498,164 +474,18 @@ function setZoom(value)
             )
         );
 
-
     updateCanvasSize();
 }
 
 
 // ============================================================
-// LZFSE : COPIE JS -> WASM
+// DÉCOMPRESSION LZFSE VIA MEMFS
 // ============================================================
 
-function copyBytesToWasm(bytes)
-{
-    if (!lzfseModule)
-        throw new Error("LZFSE non initialisé");
-
-
-    const ptr =
-        lzfseModule._lzfse_malloc(
-            bytes.length
-        );
-
-
-    if (!ptr)
-    {
-        throw new Error(
-            "Impossible d'allouer la mémoire WASM."
-        );
-    }
-
-
-    // On copie les données JavaScript
-    // dans la mémoire WASM octet par octet
-    //
-    // La fonction C fait le vrai memcpy.
-    //
-    // Pour lui passer la source JavaScript,
-    // on utilise temporairement FS n'est PAS possible
-    // ici. Nous allons donc utiliser un buffer
-    // Uint8Array partagé avec la mémoire WASM.
-    //
-    // Cette fonction est remplacée plus bas par
-    // copyBytesToWasmDirect() si wasmMemory est disponible.
-
-
-    return ptr;
-}
-
-
-// ============================================================
-// ACCÈS MÉMOIRE WASM
-// ============================================================
-
-function getWasmMemory()
-{
-    /*
-     * Les versions modernes d'Emscripten exposent
-     * normalement la mémoire sous forme de WebAssembly.Memory.
-     */
-
-    if (
-        lzfseModule &&
-        lzfseModule.wasmMemory
-    )
-    {
-        return lzfseModule.wasmMemory;
-    }
-
-
-    if (
-        lzfseModule &&
-        lzfseModule.asm &&
-        lzfseModule.asm.memory
-    )
-    {
-        return lzfseModule.asm.memory;
-    }
-
-
-    return null;
-}
-
-
-// ============================================================
-// COPIE DIRECTE VERS WASM
-// ============================================================
-
-function copyBytesIntoWasm(ptr, bytes)
-{
-    const memory =
-        getWasmMemory();
-
-
-    if (!memory)
-    {
-        throw new Error(
-            "La mémoire WASM n'est pas accessible."
-        );
-    }
-
-
-    const heap =
-        new Uint8Array(
-            memory.buffer
-        );
-
-
-    heap.set(
-        bytes,
-        ptr
-    );
-}
-
-
-// ============================================================
-// LECTURE DEPUIS WASM
-// ============================================================
-
-function copyBytesFromWasm(ptr, size)
-{
-    const memory =
-        getWasmMemory();
-
-
-    if (!memory)
-    {
-        throw new Error(
-            "La mémoire WASM n'est pas accessible."
-        );
-    }
-
-
-    const heap =
-        new Uint8Array(
-            memory.buffer
-        );
-
-
-    const result =
-        new Uint8Array(size);
-
-
-    result.set(
-        heap.subarray(
-            ptr,
-            ptr + size
-        )
-    );
-
-
-    return result;
-}
-
-
-// ============================================================
-// DÉCOMPRESSION LZFSE DIRECTE
-// ============================================================
-
-function decompressLZFSE(compressed,
-                         originalSize)
+async function decompressLZFSE(
+    compressed,
+    originalSize
+)
 {
     if (!lzfseModule)
     {
@@ -666,9 +496,8 @@ function decompressLZFSE(compressed,
 
 
     console.log(
-        "Décompression directe LZFSE..."
+        "Décompression LZFSE via MEMFS..."
     );
-
 
     console.log(
         "Compressed :",
@@ -681,111 +510,146 @@ function decompressLZFSE(compressed,
     );
 
 
+    const inputPath =
+        "/grille_input.lzfse";
+
+    const outputPath =
+        "/grille_output.bin";
+
+
     // --------------------------------------------------------
-    // Allocation WASM
+    // Nettoyage fichiers précédents
     // --------------------------------------------------------
-
-    const compressedPtr =
-        lzfseModule._lzfse_malloc(
-            compressed.length
-        );
-
-
-    if (!compressedPtr)
-    {
-        throw new Error(
-            "Allocation compressed impossible."
-        );
-    }
-
-
-    const decodedPtr =
-        lzfseModule._lzfse_malloc(
-            originalSize
-        );
-
-
-    if (!decodedPtr)
-    {
-        lzfseModule._lzfse_free(
-            compressedPtr
-        );
-
-        throw new Error(
-            "Allocation decoded impossible."
-        );
-    }
-
 
     try
     {
-        // ----------------------------------------------------
-        // JS -> WASM
-        // ----------------------------------------------------
+        lzfseModule.FS.unlink(
+            inputPath
+        );
+    }
+    catch (e)
+    {
+    }
 
-        copyBytesIntoWasm(
-            compressedPtr,
-            compressed
+    try
+    {
+        lzfseModule.FS.unlink(
+            outputPath
+        );
+    }
+    catch (e)
+    }
+
+
+    // --------------------------------------------------------
+    // JavaScript -> MEMFS
+    // --------------------------------------------------------
+
+    console.log(
+        "Copie des données LZFSE dans MEMFS..."
+    );
+
+    lzfseModule.FS.writeFile(
+        inputPath,
+        compressed
+    );
+
+    console.log(
+        "Fichier MEMFS créé :",
+        inputPath
+    );
+
+
+    // --------------------------------------------------------
+    // Appel C
+    //
+    // Le C connaît lui-même :
+    //
+    // /grille_input.lzfse
+    // /grille_output.bin
+    //
+    // On ne passe donc aucun char* depuis JS.
+    // --------------------------------------------------------
+
+    console.log(
+        "Appel decode_lzfse_memfs..."
+    );
+
+    const decodedSize =
+        lzfseModule._decode_lzfse_memfs(
+            originalSize
         );
 
-
-        // ----------------------------------------------------
-        // LZFSE
-        // ----------------------------------------------------
-
-        const decodedSize =
-            lzfseModule._decode_lzfse_buffer(
-                compressedPtr,
-                compressed.length,
-                decodedPtr,
-                originalSize
-            );
+    console.log(
+        "Taille décompressée :",
+        decodedSize
+    );
 
 
-        console.log(
-            "Taille décompressée :",
+    if (decodedSize <= 0)
+    {
+        throw new Error(
+            "Échec de la décompression LZFSE."
+        );
+    }
+
+
+    // --------------------------------------------------------
+    // MEMFS -> JavaScript
+    // --------------------------------------------------------
+
+    const decoded =
+        lzfseModule.FS.readFile(
+            outputPath
+        );
+
+    console.log(
+        "Archive décompressée :",
+        decoded.length,
+        "octets"
+    );
+
+
+    if (
+        decoded.length !==
+        decodedSize
+    )
+    {
+        console.warn(
+            "Taille MEMFS différente :",
+            decoded.length,
             decodedSize
         );
-
-
-        if (!decodedSize)
-        {
-            throw new Error(
-                "Échec de la décompression LZFSE."
-            );
-        }
-
-
-        // ----------------------------------------------------
-        // WASM -> JS
-        // ----------------------------------------------------
-
-        const decoded =
-            copyBytesFromWasm(
-                decodedPtr,
-                decodedSize
-            );
-
-
-        console.log(
-            "Archive décompressée :",
-            decoded.length,
-            "octets"
-        );
-
-
-        return decoded;
     }
-    finally
+
+
+    // --------------------------------------------------------
+    // Nettoyage
+    // --------------------------------------------------------
+
+    try
     {
-        lzfseModule._lzfse_free(
-            compressedPtr
-        );
-
-        lzfseModule._lzfse_free(
-            decodedPtr
+        lzfseModule.FS.unlink(
+            inputPath
         );
     }
+    catch (e)
+    {
+    }
+
+    try
+    {
+        lzfseModule.FS.unlink(
+            outputPath
+        );
+    }
+    catch (e)
+    }
+
+
+    return new Uint8Array(
+        decoded
+    );
 }
 
 
@@ -832,12 +696,11 @@ async function loadGrilleFile(file)
 
 
     // --------------------------------------------------------
-    // Lecture du fichier
+    // Lecture complète du fichier
     // --------------------------------------------------------
 
     const buffer =
         await file.arrayBuffer();
-
 
     const bytes =
         new Uint8Array(buffer);
@@ -861,7 +724,8 @@ async function loadGrilleFile(file)
     // --------------------------------------------------------
     // Taille originale
     //
-    // Les 8 premiers octets sont un uint64 little endian.
+    // Les 8 premiers octets sont un uint64
+    // little endian.
     // --------------------------------------------------------
 
     const view =
@@ -876,7 +740,9 @@ async function loadGrilleFile(file)
 
 
     const originalSize =
-        Number(originalSizeBig);
+        Number(
+            originalSizeBig
+        );
 
 
     console.log(
@@ -899,7 +765,7 @@ async function loadGrilleFile(file)
 
 
     // --------------------------------------------------------
-    // Données LZFSE
+    // Données compressées
     // --------------------------------------------------------
 
     const compressed =
@@ -913,7 +779,7 @@ async function loadGrilleFile(file)
 
 
     // --------------------------------------------------------
-    // Vérification signature
+    // Signature LZFSE
     // --------------------------------------------------------
 
     if (compressed.length >= 4)
@@ -948,36 +814,23 @@ async function loadGrilleFile(file)
     // --------------------------------------------------------
 
     const decoded =
-        decompressLZFSE(
+        await decompressLZFSE(
             compressed,
             originalSize
         );
 
 
-    // --------------------------------------------------------
-    // Vérification
-    // --------------------------------------------------------
-
-    if (
-        decoded.length !==
-        originalSize
-    )
-    {
-        console.warn(
-            "Taille obtenue différente de la taille annoncée :",
-            decoded.length,
-            originalSize
-        );
-    }
-
-
     console.log(
-        "Décompression terminée."
+        "Décompression terminée :",
+        decoded.length,
+        "octets"
     );
 
 
-    // Pour l'instant on conserve les données
-    // afin de préparer le décodage NSKeyedArchiver.
+    // --------------------------------------------------------
+    // Conservation temporaire
+    // --------------------------------------------------------
+
     window.lastDecodedGrille =
         decoded;
 
@@ -990,7 +843,7 @@ async function loadGrilleFile(file)
 
 
     // --------------------------------------------------------
-    // Analyse rapide des premiers octets
+    // Affichage des premiers octets
     // --------------------------------------------------------
 
     console.log(
@@ -998,14 +851,21 @@ async function loadGrilleFile(file)
         Array.from(
             decoded.subarray(
                 0,
-                Math.min(32, decoded.length)
+                Math.min(
+                    32,
+                    decoded.length
+                )
             )
         )
     );
 
 
     // --------------------------------------------------------
-    // Pour l'instant
+    // Pour l'instant :
+    // LZFSE est terminé.
+    //
+    // Étape suivante :
+    // décodage de NSKeyedArchiver.
     // --------------------------------------------------------
 
     alert(
@@ -1024,6 +884,10 @@ document.addEventListener(
     "DOMContentLoaded",
     async () =>
 {
+    // --------------------------------------------------------
+    // Canvas
+    // --------------------------------------------------------
+
     canvas =
         document.getElementById(
             "canvas"
@@ -1041,7 +905,9 @@ document.addEventListener(
 
 
     ctx =
-        canvas.getContext("2d");
+        canvas.getContext(
+            "2d"
+        );
 
 
     if (!ctx)
@@ -1053,6 +919,10 @@ document.addEventListener(
         return;
     }
 
+
+    // --------------------------------------------------------
+    // Éléments HTML
+    // --------------------------------------------------------
 
     const imageInput =
         document.getElementById(
@@ -1091,7 +961,7 @@ document.addEventListener(
 
 
     // --------------------------------------------------------
-    // Ouvrir image
+    // OUVRIR IMAGE
     // --------------------------------------------------------
 
     if (openButton)
@@ -1115,9 +985,12 @@ document.addEventListener(
                 const file =
                     event.target.files[0];
 
+
                 if (file)
                 {
-                    loadImageFile(file);
+                    loadImageFile(
+                        file
+                    );
                 }
             }
         );
@@ -1125,7 +998,7 @@ document.addEventListener(
 
 
     // --------------------------------------------------------
-    // Ouvrir grille
+    // OUVRIR GRILLE
     // --------------------------------------------------------
 
     if (openGrilleButton)
@@ -1149,6 +1022,7 @@ document.addEventListener(
                 const file =
                     event.target.files[0];
 
+
                 if (!file)
                     return;
 
@@ -1166,6 +1040,7 @@ document.addEventListener(
                         error
                     );
 
+
                     alert(
                         "Erreur lecture grille :\n\n" +
                         error.message
@@ -1177,7 +1052,7 @@ document.addEventListener(
 
 
     // --------------------------------------------------------
-    // Effacer
+    // EFFACER
     // --------------------------------------------------------
 
     if (clearButton)
@@ -1190,7 +1065,7 @@ document.addEventListener(
 
 
     // --------------------------------------------------------
-    // Taille des cases
+    // TAILLE DES CASES
     // --------------------------------------------------------
 
     if (tileSizeInput)
@@ -1244,7 +1119,7 @@ document.addEventListener(
 
 
     // --------------------------------------------------------
-    // Touch
+    // TOUCH START
     // --------------------------------------------------------
 
     canvas.addEventListener(
@@ -1253,6 +1128,8 @@ document.addEventListener(
         {
             event.preventDefault();
 
+
+            // Deux doigts = début du zoom
 
             if (
                 event.touches.length === 2
@@ -1270,6 +1147,8 @@ document.addEventListener(
             }
 
 
+            // Un doigt
+
             if (
                 event.touches.length === 1
             )
@@ -1281,8 +1160,10 @@ document.addEventListener(
                 touchStartX =
                     touch.clientX;
 
+
                 touchStartY =
                     touch.clientY;
+
 
                 isDragging = false;
             }
@@ -1292,6 +1173,10 @@ document.addEventListener(
         }
     );
 
+
+    // --------------------------------------------------------
+    // TOUCH MOVE
+    // --------------------------------------------------------
 
     canvas.addEventListener(
         "touchmove",
@@ -1325,7 +1210,8 @@ document.addEventListener(
 
 
                     setZoom(
-                        zoomFactor * ratio
+                        zoomFactor *
+                        ratio
                     );
                 }
 
@@ -1339,7 +1225,7 @@ document.addEventListener(
 
 
             // ------------------------------------------------
-            // Un doigt = sélection
+            // Un doigt
             // ------------------------------------------------
 
             if (
@@ -1353,6 +1239,7 @@ document.addEventListener(
                 const dx =
                     touch.clientX -
                     touchStartX;
+
 
                 const dy =
                     touch.clientY -
@@ -1373,6 +1260,10 @@ document.addEventListener(
         }
     );
 
+
+    // --------------------------------------------------------
+    // TOUCH END
+    // --------------------------------------------------------
 
     canvas.addEventListener(
         "touchend",
@@ -1421,7 +1312,7 @@ document.addEventListener(
 
 
     // --------------------------------------------------------
-    // Initialisation
+    // INITIALISATION LZFSE
     // --------------------------------------------------------
 
     try
