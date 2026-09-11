@@ -7,6 +7,14 @@
 
 
 /* --------------------------------------------------
+   Import du module LZFSE
+   -------------------------------------------------- */
+
+import createLZFSEModule
+    from "./lzfse/lzfse.js";
+
+
+/* --------------------------------------------------
    Éléments HTML
    -------------------------------------------------- */
 
@@ -35,10 +43,6 @@ const info =
     document.getElementById("info");
 
 
-/* --------------------------------------------------
-   Éléments .grille
-   -------------------------------------------------- */
-
 const openGrilleButton =
     document.getElementById("openGrilleButton");
 
@@ -47,35 +51,57 @@ const grilleInput =
 
 
 /* --------------------------------------------------
-   Vérification HTML
+   Module LZFSE
    -------------------------------------------------- */
 
-if (!canvas) {
-    console.error("ERREUR : #canvas introuvable");
-}
+let lzfseModule = null;
 
-if (!workspace) {
-    console.error("ERREUR : #workspace introuvable");
-}
+let lzfseReady = false;
 
-if (!openButton) {
-    console.error("ERREUR : #openButton introuvable");
-}
 
-if (!imageInput) {
-    console.error("ERREUR : #imageInput introuvable");
-}
+/* --------------------------------------------------
+   Initialisation LZFSE
+   -------------------------------------------------- */
 
-if (!openGrilleButton) {
-    console.error(
-        "ERREUR : #openGrilleButton introuvable"
-    );
-}
+async function initializeLZFSE() {
 
-if (!grilleInput) {
-    console.error(
-        "ERREUR : #grilleInput introuvable"
-    );
+    try {
+
+        console.log(
+            "Chargement du module LZFSE..."
+        );
+
+
+        lzfseModule =
+            await createLZFSEModule();
+
+
+        lzfseReady = true;
+
+
+        console.log(
+            "LZFSE prêt"
+        );
+
+
+        info.textContent =
+            "LZFSE prêt";
+
+
+    }
+    catch (error) {
+
+        console.error(
+            "Erreur chargement LZFSE :",
+            error
+        );
+
+
+        info.textContent =
+            "Erreur LZFSE";
+
+    }
+
 }
 
 
@@ -98,7 +124,8 @@ let tileSize = 20;
 let cols = 0;
 let rows = 0;
 
-let checkedTiles = new Set();
+let checkedTiles =
+    new Set();
 
 
 /* --------------------------------------------------
@@ -115,7 +142,8 @@ let offsetY = 0;
    Interaction tactile
    -------------------------------------------------- */
 
-let pointers = new Map();
+let pointers =
+    new Map();
 
 let lastPointerX = 0;
 let lastPointerY = 0;
@@ -125,210 +153,628 @@ let pinchStartZoom = 1;
 
 
 /* ==================================================
-   OUVERTURE D'UNE IMAGE
+   OUVERTURE IMAGE
    ================================================== */
 
-if (openButton && imageInput) {
+openButton.addEventListener(
+    "click",
+    () => {
 
-    openButton.addEventListener(
-        "click",
-        () => {
+        imageInput.value = "";
 
-            console.log(
-                "CLICK : Ouvrir une image"
+        imageInput.click();
+
+    }
+);
+
+
+imageInput.addEventListener(
+    "change",
+    event => {
+
+        const file =
+            event.target.files[0];
+
+
+        if (!file)
+            return;
+
+
+        console.log(
+            "Image :",
+            file.name
+        );
+
+
+        const url =
+            URL.createObjectURL(file);
+
+
+        const img =
+            new Image();
+
+
+        img.onload = () => {
+
+            sourceImage = img;
+
+
+            imageWidth =
+                img.naturalWidth;
+
+
+            imageHeight =
+                img.naturalHeight;
+
+
+            URL.revokeObjectURL(
+                url
             );
 
-            imageInput.value = "";
 
-            imageInput.click();
+            checkedTiles.clear();
+
+
+            recomputeGrid();
+
+            resetView();
+
+            updateInfo();
+
+            draw();
+
+        };
+
+
+        img.onerror = () => {
+
+            URL.revokeObjectURL(
+                url
+            );
+
+
+            info.textContent =
+                "Erreur image";
+
+        };
+
+
+        img.src = url;
+
+    }
+);
+
+
+/* ==================================================
+   OUVERTURE .GRILLE
+   ================================================== */
+
+openGrilleButton.addEventListener(
+    "click",
+    () => {
+
+        grilleInput.value = "";
+
+        grilleInput.click();
+
+    }
+);
+
+
+grilleInput.addEventListener(
+    "change",
+    async event => {
+
+        const file =
+            event.target.files[0];
+
+
+        if (!file)
+            return;
+
+
+        console.log(
+            "================================"
+        );
+
+
+        console.log(
+            "OUVERTURE GRILLE"
+        );
+
+
+        console.log(
+            "Nom :",
+            file.name
+        );
+
+
+        console.log(
+            "Taille fichier :",
+            file.size
+        );
+
+
+        console.log(
+            "Type :",
+            file.type
+        );
+
+
+        console.log(
+            "================================"
+        );
+
+
+        info.textContent =
+            "Lecture de la grille...";
+
+
+        try {
+
+            await loadGrilleFile(
+                file
+            );
 
         }
+        catch (error) {
+
+            console.error(
+                "Erreur lecture grille :",
+                error
+            );
+
+
+            info.textContent =
+                "Erreur lecture grille";
+
+        }
+
+    }
+);
+
+
+/* ==================================================
+   LECTURE DU FICHIER .GRILLE
+   ================================================== */
+
+async function loadGrilleFile(
+    file
+) {
+
+    if (!lzfseReady) {
+
+        throw new Error(
+            "Le module LZFSE n'est pas prêt"
+        );
+
+    }
+
+
+    /*
+     * Lecture complète du fichier.
+     */
+
+    const buffer =
+        await file.arrayBuffer();
+
+
+    console.log(
+        "Buffer reçu :",
+        buffer.byteLength,
+        "octets"
     );
 
 
-    imageInput.addEventListener(
-        "change",
-        event => {
+    if (buffer.byteLength < 8) {
 
-            const file =
-                event.target.files[0];
+        throw new Error(
+            "Fichier trop petit"
+        );
 
-            if (!file) {
-                return;
-            }
+    }
 
 
-            console.log(
-                "Image sélectionnée :",
-                file.name,
-                file.size,
-                file.type
+    /*
+     * Les 8 premiers octets contiennent
+     * la taille de l'archive originale.
+     *
+     * Format little endian.
+     */
+
+    const headerView =
+        new DataView(
+            buffer,
+            0,
+            8
+        );
+
+
+    const originalSize =
+        readUInt64LE(
+            headerView,
+            0
+        );
+
+
+    console.log(
+        "Taille originale annoncée :",
+        originalSize
+    );
+
+
+    /*
+     * Les données LZFSE commencent
+     * à l'offset 8.
+     */
+
+    const compressed =
+        new Uint8Array(
+            buffer,
+            8
+        );
+
+
+    console.log(
+        "Taille LZFSE :",
+        compressed.byteLength
+    );
+
+
+    /*
+     * Vérification de la signature.
+     *
+     * Ton fichier réel doit commencer
+     * par "bvx2".
+     */
+
+    const magic =
+        String.fromCharCode(
+            compressed[0],
+            compressed[1],
+            compressed[2],
+            compressed[3]
+        );
+
+
+    console.log(
+        "Signature LZFSE :",
+        magic
+    );
+
+
+    if (
+        magic !== "bvx2" &&
+        magic !== "bvx1" &&
+        magic !== "bvxn" &&
+        magic !== "bvx-"
+    ) {
+
+        throw new Error(
+            "Signature LZFSE inconnue : " +
+            magic
+        );
+
+    }
+
+
+    /*
+     * Allocation du buffer de sortie
+     * dans la mémoire WASM.
+     */
+
+    const srcPtr =
+        lzfseModule._malloc(
+            compressed.byteLength
+        );
+
+
+    const dstPtr =
+        lzfseModule._malloc(
+            originalSize
+        );
+
+
+    try {
+
+        /*
+         * Copie du fichier compressé
+         * dans la mémoire WASM.
+         */
+
+        lzfseModule.HEAPU8.set(
+            compressed,
+            srcPtr
+        );
+
+
+        console.log(
+            "Décompression LZFSE..."
+        );
+
+
+        /*
+         * Appel C :
+         *
+         * decode_lzfse(
+         *     src,
+         *     srcSize,
+         *     dst,
+         *     dstSize
+         * )
+         */
+
+        const decodedSize =
+            lzfseModule.ccall(
+                "decode_lzfse",
+                "number",
+                [
+                    "number",
+                    "number",
+                    "number",
+                    "number"
+                ],
+                [
+                    srcPtr,
+                    compressed.byteLength,
+                    dstPtr,
+                    originalSize
+                ]
             );
 
 
-            const url =
-                URL.createObjectURL(file);
+        console.log(
+            "Taille décompressée :",
+            decodedSize
+        );
 
 
-            const img =
-                new Image();
+        if (decodedSize <= 0) {
 
-
-            img.onload = () => {
-
-                sourceImage = img;
-
-                imageWidth =
-                    img.naturalWidth;
-
-                imageHeight =
-                    img.naturalHeight;
-
-
-                URL.revokeObjectURL(url);
-
-
-                checkedTiles.clear();
-
-
-                recomputeGrid();
-
-                resetView();
-
-                updateInfo();
-
-                draw();
-
-            };
-
-
-            img.onerror = () => {
-
-                console.error(
-                    "Impossible de charger l'image"
-                );
-
-                URL.revokeObjectURL(url);
-
-                info.textContent =
-                    "Erreur de chargement";
-
-            };
-
-
-            img.src = url;
+            throw new Error(
+                "Échec décompression LZFSE"
+            );
 
         }
+
+
+        /*
+         * Copie du résultat hors
+         * de la mémoire WASM.
+         */
+
+        const decompressed =
+            new Uint8Array(
+                decodedSize
+            );
+
+
+        decompressed.set(
+            lzfseModule.HEAPU8.subarray(
+                dstPtr,
+                dstPtr +
+                decodedSize
+            )
+        );
+
+
+        console.log(
+            "Décompression terminée"
+        );
+
+
+        /*
+         * Pour l'instant :
+         *
+         * on inspecte seulement
+         * l'archive résultante.
+         */
+
+        inspectArchive(
+            decompressed
+        );
+
+
+        info.textContent =
+            `LZFSE OK — ${decodedSize.toLocaleString(
+                "fr-FR"
+            )} octets`;
+
+
+    }
+    finally {
+
+        lzfseModule._free(
+            srcPtr
+        );
+
+
+        lzfseModule._free(
+            dstPtr
+        );
+
+    }
+
+}
+
+
+/* ==================================================
+   UINT64 LITTLE ENDIAN
+   ================================================== */
+
+function readUInt64LE(
+    view,
+    offset
+) {
+
+    /*
+     * DataView.getBigUint64 est disponible
+     * dans Safari moderne.
+     */
+
+    if (
+        typeof view.getBigUint64 ===
+        "function"
+    ) {
+
+        const value =
+            view.getBigUint64(
+                offset,
+                true
+            );
+
+
+        /*
+         * Conversion en Number.
+         *
+         * Ici nos archives sont très
+         * largement sous Number.MAX_SAFE_INTEGER.
+         */
+
+        return Number(
+            value
+        );
+
+    }
+
+
+    /*
+     * Fallback ancien navigateur.
+     */
+
+    const low =
+        view.getUint32(
+            offset,
+            true
+        );
+
+
+    const high =
+        view.getUint32(
+            offset + 4,
+            true
+        );
+
+
+    return (
+        low +
+        high *
+        0x100000000
     );
 
 }
 
 
 /* ==================================================
-   OUVERTURE D'UNE GRILLE
+   INSPECTION DE L'ARCHIVE
    ================================================== */
 
-if (openGrilleButton && grilleInput) {
+function inspectArchive(
+    data
+) {
 
-    openGrilleButton.addEventListener(
-        "click",
-        () => {
-
-            console.log(
-                "CLICK : Ouvrir une grille"
-            );
-
-
-            /*
-             * Important sur iPad :
-             *
-             * remettre value à vide permet de
-             * sélectionner à nouveau le même fichier.
-             */
-
-            grilleInput.value = "";
-
-
-            grilleInput.click();
-
-        }
+    console.log(
+        "================================"
     );
 
 
-    grilleInput.addEventListener(
-        "change",
-        event => {
-
-            const file =
-                event.target.files[0];
+    console.log(
+        "ARCHIVE DÉCOMPRESSÉE"
+    );
 
 
-            if (!file) {
-
-                console.log(
-                    "Aucun fichier .grille sélectionné"
-                );
-
-                return;
-
-            }
+    console.log(
+        "Taille :",
+        data.length
+    );
 
 
-            console.log(
-                "================================"
-            );
+    /*
+     * Les premiers octets sont affichés
+     * pour identifier le format.
+     */
 
-            console.log(
-                "FICHIER GRILLE SÉLECTIONNÉ"
-            );
-
-            console.log(
-                "Nom   :",
-                file.name
-            );
-
-            console.log(
-                "Taille:",
-                file.size
-            );
-
-            console.log(
-                "Type  :",
-                file.type
-            );
-
-            console.log(
-                "================================"
-            );
+    const count =
+        Math.min(
+            32,
+            data.length
+        );
 
 
-            info.textContent =
-                `Grille : ${file.name}`;
+    let hex = "";
 
 
-            /*
-             * Pour l'instant nous ne décodons
-             * pas encore le fichier.
-             *
-             * La prochaine étape sera :
-             *
-             * .grille
-             *   ↓
-             * 8 octets taille originale
-             *   ↓
-             * données LZFSE
-             *   ↓
-             * archive
-             *   ↓
-             * GRILLE
-             * COULEUR
-             * PALETTE
-             * ENCOURS
-             * TILESIZE
-             */
+    for (
+        let i = 0;
+        i < count;
+        i++
+    ) {
+
+        hex +=
+            data[i]
+                .toString(16)
+                .padStart(2, "0") +
+            " ";
+
+    }
+
+
+    console.log(
+        "Premiers octets :",
+        hex
+    );
+
+
+    /*
+     * ASCII.
+     */
+
+    let ascii = "";
+
+
+    for (
+        let i = 0;
+        i < count;
+        i++
+    ) {
+
+        const c =
+            data[i];
+
+
+        if (
+            c >= 32 &&
+            c <= 126
+        ) {
+
+            ascii +=
+                String.fromCharCode(c);
 
         }
+        else {
+
+            ascii += ".";
+
+        }
+
+    }
+
+
+    console.log(
+        "ASCII :",
+        ascii
     );
+
+
+    console.log(
+        "================================"
+    );
+
+
+    /*
+     * Pour l'instant nous ne tentons
+     * PAS encore de décoder NSKeyedArchiver.
+     */
 
 }
 
@@ -337,57 +783,55 @@ if (openGrilleButton && grilleInput) {
    TAILLE DES CASES
    ================================================== */
 
-if (tileSizeInput) {
+tileSizeInput.addEventListener(
+    "change",
+    () => {
 
-    tileSizeInput.addEventListener(
-        "change",
-        () => {
-
-            let value =
-                parseInt(
-                    tileSizeInput.value,
-                    10
-                );
+        let value =
+            parseInt(
+                tileSizeInput.value,
+                10
+            );
 
 
-            if (!Number.isFinite(value)) {
+        if (
+            !Number.isFinite(value)
+        ) {
 
-                value = 20;
-
-            }
-
-
-            value =
-                Math.max(
-                    2,
-                    Math.min(
-                        100,
-                        value
-                    )
-                );
-
-
-            tileSize =
-                value;
-
-
-            tileSizeInput.value =
-                tileSize;
-
-
-            checkedTiles.clear();
-
-
-            recomputeGrid();
-
-            updateInfo();
-
-            draw();
+            value = 20;
 
         }
-    );
 
-}
+
+        value =
+            Math.max(
+                2,
+                Math.min(
+                    100,
+                    value
+                )
+            );
+
+
+        tileSize =
+            value;
+
+
+        tileSizeInput.value =
+            tileSize;
+
+
+        checkedTiles.clear();
+
+
+        recomputeGrid();
+
+        updateInfo();
+
+        draw();
+
+    }
+);
 
 
 /* ==================================================
@@ -396,9 +840,8 @@ if (tileSizeInput) {
 
 function recomputeGrid() {
 
-    if (!sourceImage) {
+    if (!sourceImage)
         return;
-    }
 
 
     cols =
@@ -418,7 +861,7 @@ function recomputeGrid() {
 
 
 /* ==================================================
-   RÉINITIALISATION DE LA VUE
+   RESET VUE
    ================================================== */
 
 function resetView() {
@@ -453,7 +896,7 @@ function resetView() {
 
 
 /* ==================================================
-   INFORMATIONS
+   INFORMATION
    ================================================== */
 
 function updateInfo() {
@@ -482,11 +925,6 @@ function updateInfo() {
 
 function draw() {
 
-    if (!canvas || !workspace) {
-        return;
-    }
-
-
     const width =
         workspace.clientWidth;
 
@@ -494,10 +932,6 @@ function draw() {
     const height =
         workspace.clientHeight;
 
-
-    /*
-     * Taille réelle du canvas.
-     */
 
     canvas.width =
         Math.max(
@@ -521,21 +955,12 @@ function draw() {
     );
 
 
-    if (!sourceImage) {
+    if (!sourceImage)
         return;
-    }
 
 
     ctx.save();
 
-
-    /*
-     * Transformation :
-     *
-     * coordonnées image
-     *        ↓
-     * coordonnées écran
-     */
 
     ctx.translate(
         offsetX,
@@ -549,10 +974,6 @@ function draw() {
     );
 
 
-    /*
-     * Image originale
-     */
-
     ctx.drawImage(
         sourceImage,
         0,
@@ -560,16 +981,7 @@ function draw() {
     );
 
 
-    /*
-     * Cases sélectionnées
-     */
-
     drawCheckedTiles();
-
-
-    /*
-     * Grille
-     */
 
     drawGrid();
 
@@ -594,12 +1006,14 @@ function drawCheckedTiles() {
 
             const row =
                 Math.floor(
-                    index / cols
+                    index /
+                    cols
                 );
 
 
             const col =
-                index % cols;
+                index %
+                cols;
 
 
             const x =
@@ -626,9 +1040,11 @@ function drawCheckedTiles() {
                 );
 
 
-            if (w <= 0 || h <= 0) {
+            if (
+                w <= 0 ||
+                h <= 0
+            )
                 return;
-            }
 
 
             ctx.fillRect(
@@ -650,17 +1066,15 @@ function drawCheckedTiles() {
 
 function drawGrid() {
 
-    if (cols <= 0 || rows <= 0) {
+    if (
+        cols <= 0 ||
+        rows <= 0
+    )
         return;
-    }
 
 
     ctx.beginPath();
 
-
-    /*
-     * Lignes verticales
-     */
 
     for (
         let col = 0;
@@ -687,10 +1101,6 @@ function drawGrid() {
 
     }
 
-
-    /*
-     * Lignes horizontales
-     */
 
     for (
         let row = 0;
@@ -733,7 +1143,7 @@ function drawGrid() {
 
 
 /* ==================================================
-   CONVERSION ÉCRAN → IMAGE
+   ÉCRAN → IMAGE
    ================================================== */
 
 function imagePointFromScreen(
@@ -764,7 +1174,7 @@ function imagePointFromScreen(
 
 
 /* ==================================================
-   RECHERCHE D'UNE CASE
+   CASE SOUS LE DOIGT
    ================================================== */
 
 function tileAtScreenPoint(
@@ -772,9 +1182,8 @@ function tileAtScreenPoint(
     screenY
 ) {
 
-    if (!sourceImage) {
+    if (!sourceImage)
         return -1;
-    }
 
 
     const point =
@@ -820,7 +1229,7 @@ function tileAtScreenPoint(
 
 
 /* ==================================================
-   SÉLECTION D'UNE CASE
+   TOGGLE CASE
    ================================================== */
 
 function toggleTile(
@@ -835,9 +1244,8 @@ function toggleTile(
         );
 
 
-    if (index < 0) {
+    if (index < 0)
         return;
-    }
 
 
     if (
@@ -871,32 +1279,23 @@ function toggleTile(
    EFFACER
    ================================================== */
 
-if (clearButton) {
+clearButton.addEventListener(
+    "click",
+    () => {
 
-    clearButton.addEventListener(
-        "click",
-        () => {
+        checkedTiles.clear();
 
-            checkedTiles.clear();
+        updateInfo();
 
-            updateInfo();
+        draw();
 
-            draw();
-
-        }
-    );
-
-}
+    }
+);
 
 
 /* ==================================================
-   GESTION DES POINTERS
+   POINTER DOWN
    ================================================== */
-
-
-/* --------------------------------------------------
-   Pointer Down
-   -------------------------------------------------- */
 
 canvas.addEventListener(
     "pointerdown",
@@ -916,13 +1315,9 @@ canvas.addEventListener(
         );
 
 
-        /*
-         * Un seul doigt :
-         *
-         * sélection d'une case.
-         */
-
-        if (pointers.size === 1) {
+        if (
+            pointers.size === 1
+        ) {
 
             toggleTile(
                 event.clientX,
@@ -940,13 +1335,9 @@ canvas.addEventListener(
         }
 
 
-        /*
-         * Deux doigts :
-         *
-         * début du zoom.
-         */
-
-        if (pointers.size === 2) {
+        if (
+            pointers.size === 2
+        ) {
 
             pinchStartDistance =
                 pointerDistance();
@@ -961,9 +1352,9 @@ canvas.addEventListener(
 );
 
 
-/* --------------------------------------------------
-   Pointer Move
-   -------------------------------------------------- */
+/* ==================================================
+   POINTER MOVE
+   ================================================== */
 
 canvas.addEventListener(
     "pointermove",
@@ -973,11 +1364,8 @@ canvas.addEventListener(
             !pointers.has(
                 event.pointerId
             )
-        ) {
-
+        )
             return;
-
-        }
 
 
         pointers.set(
@@ -989,13 +1377,9 @@ canvas.addEventListener(
         );
 
 
-        /*
-         * Deux doigts :
-         *
-         * zoom.
-         */
-
-        if (pointers.size === 2) {
+        if (
+            pointers.size === 2
+        ) {
 
             const distance =
                 pointerDistance();
@@ -1034,21 +1418,13 @@ canvas.addEventListener(
 
         }
 
-
-        /*
-         * Un doigt :
-         *
-         * pas de déplacement pour
-         * le moment.
-         */
-
     }
 );
 
 
-/* --------------------------------------------------
-   Pointer Up
-   -------------------------------------------------- */
+/* ==================================================
+   POINTER UP
+   ================================================== */
 
 canvas.addEventListener(
     "pointerup",
@@ -1071,9 +1447,9 @@ canvas.addEventListener(
 );
 
 
-/* --------------------------------------------------
-   Pointer Cancel
-   -------------------------------------------------- */
+/* ==================================================
+   POINTER CANCEL
+   ================================================== */
 
 canvas.addEventListener(
     "pointercancel",
@@ -1097,7 +1473,7 @@ canvas.addEventListener(
 
 
 /* ==================================================
-   DISTANCE ENTRE LES DEUX DOIGTS
+   DISTANCE DOIGTS
    ================================================== */
 
 function pointerDistance() {
@@ -1110,11 +1486,8 @@ function pointerDistance() {
 
     if (
         values.length < 2
-    ) {
-
+    )
         return 0;
-
-    }
 
 
     const dx =
@@ -1136,7 +1509,7 @@ function pointerDistance() {
 
 
 /* ==================================================
-   RESIZE ÉCRAN
+   RESIZE
    ================================================== */
 
 window.addEventListener(
@@ -1150,7 +1523,9 @@ window.addEventListener(
 
 
 /* ==================================================
-   DESSIN INITIAL
+   INITIALISATION
    ================================================== */
 
 draw();
+
+initializeLZFSE();
