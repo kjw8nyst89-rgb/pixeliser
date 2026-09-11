@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="fr">
+
 <head>
+
     <meta charset="UTF-8">
 
     <meta name="viewport"
@@ -14,22 +16,61 @@
     <title>Pixeliser</title>
 
     <link rel="stylesheet" href="pixeliser.css">
+
 </head>
 
 <body>
 
-    <div id="app">
-        <h1>Pixeliser</h1>
+<div id="app">
 
-        <button id="testButton">
-            Tester Pixeliser
+    <!-- Barre d'outils -->
+
+    <div id="toolbar">
+
+        <button id="openButton">
+            Ouvrir une image
         </button>
 
-        <p id="status">
-            Application chargée.
-        </p>
+        <button id="clearButton">
+            Effacer
+        </button>
+
+        <label class="tileControl">
+            Taille :
+            <input id="tileSize"
+                   type="number"
+                   min="2"
+                   max="100"
+                   value="20">
+        </label>
+
+        <span id="info">
+            Aucune image
+        </span>
+
     </div>
 
-    <script src="pixeliser.js"></script>
+
+    <!-- Input fichier invisible -->
+
+    <input id="imageInput"
+           type="file"
+           accept="image/*"
+           hidden>
+
+
+    <!-- Zone de travail -->
+
+    <div id="workspace">
+
+        <canvas id="canvas"></canvas>
+
+    </div>
+
+</div>
+
+
+<script src="pixeliser.js"></script>
+
 </body>
 </html>
