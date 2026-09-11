@@ -54,7 +54,6 @@ const grilleInput =
    Module LZFSE
    -------------------------------------------------- */
 
-let lzfseModule = null;
 
 let lzfseReady = false;
 
