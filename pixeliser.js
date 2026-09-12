@@ -2370,6 +2370,22 @@ function decodeNSIndexSet(
         data.length
     );
 
+    console.log(
+    "NSRangeData HEX :",
+    Array.from(data)
+        .map(
+            b => b.toString(16).padStart(2, "0")
+        )
+        .join(" ")
+);
+
+
+
+console.log(
+    "NSRangeData DEC :",
+    Array.from(data)
+);
+
 
     /*
      * NSKeyedArchiver encode NSIndexSet sous forme :
