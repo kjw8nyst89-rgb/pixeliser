@@ -403,9 +403,6 @@ function handlePointerDown(event)
 {
     event.preventDefault();
 
-    if (event.pointerType === "mouse")
-        return;
-
     canvas.setPointerCapture(event.pointerId);
 
     activePointers.set(
@@ -453,8 +450,6 @@ function handlePointerDown(event)
 
 function handlePointerMove(event)
 {
-    if (event.pointerType === "mouse")
-        return;
 
     if (!activePointers.has(event.pointerId))
         return;
@@ -517,8 +512,6 @@ function handlePointerMove(event)
 
 function handlePointerUp(event)
 {
-    if (event.pointerType === "mouse")
-        return;
 
     event.preventDefault();
 
