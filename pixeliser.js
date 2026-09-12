@@ -130,6 +130,22 @@ async function initializeLZFSE(){
     try{
         const module=await createLZFSEModule();
         console.log("Module LZFSE créé :",module);
+console.log("Module LZFSE créé :", lzfseModule);
+
+console.log(
+    "decode_lzfse_memfs :",
+    typeof lzfseModule._decode_lzfse_memfs
+);
+
+console.log(
+    "encode_lzfse_memfs :",
+    typeof lzfseModule._encode_lzfse_memfs
+);
+
+console.log("LZFSE prêt");
+
+await testEncodeLZFSE();
+        
         console.log("decode_lzfse_memfs :",typeof module._decode_lzfse_memfs);
         if(typeof module._decode_lzfse_memfs!=="function"){
             throw new Error("_decode_lzfse_memfs n'est pas disponible.");
