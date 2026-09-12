@@ -1032,7 +1032,8 @@ function distanceBetweenTouches(touch1,touch2){
 // TOUCH START
 // ============================================================
 function handleTouchStart(event){
-
+console.log("### TOUCHSTART", event.touches.length);
+   
     event.preventDefault();
 
     touchInteractionActive=true;
@@ -1088,6 +1089,7 @@ function handleTouchStart(event){
 // TOUCH MOVE
 // ============================================================
 function handleTouchMove(event){
+console.log("### TOUCHMOVE", event.touches.length);
 
     event.preventDefault();
 
@@ -1211,6 +1213,7 @@ function handleTouchMove(event){
 // TOUCH END
 // ============================================================
 function handleTouchEnd(event){
+console.log("### TOUCHEND", event.touches.length);
 
     event.preventDefault();
 
