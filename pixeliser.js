@@ -65,9 +65,15 @@ document.addEventListener(
     "DOMContentLoaded",
     async function ()
     {
+                const PIXELISER_VERSION = "V1";
+
+console.log("================================");
+console.log("PIXELISER VERSION :", PIXELISER_VERSION);
+console.log("================================");
         console.log(
             "Pixeliser démarrage..."
         );
+
 
 
         canvas =
