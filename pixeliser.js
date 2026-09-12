@@ -1762,92 +1762,31 @@ class KeyedArchiveResolver
 // DECODAGE ARCHIVE
 // ============================================================
 
-function decodeGrilleArchive(
-    decoded
-)
+function decodeGrilleArchive(archive)
 {
-    console.log(
-        "================================"
-    );
-
-
-    console.log(
-        "DECODAGE BINARY PLIST"
-    );
-
-
-    console.log(
-        "Taille :",
-        decoded.length
-    );
-
-
-    const decoder =
-        new BinaryPlistDecoder(
-            decoded
-        );
-
-
-    const plist =
-        decoder.decode();
-
-
-    window.lastPlist =
-        plist;
-
-
-    window.lastPlistDecoder =
-        decoder;
-
-
-    console.log(
-        "Plist décodé :",
-        plist
-    );
-
-
-    console.log(
-        "Clés plist racine :",
-        Object.keys(plist)
-    );
-
-
-    if (
-        plist["$archiver"] !==
-        "NSKeyedArchiver"
-    )
+    if (!archive || !archive.$objects)
     {
         throw new Error(
-            "Archive NSKeyedArchiver attendue."
+            "Archive NSKeyedArchiver invalide."
         );
     }
 
-
     const resolver =
-        new KeyedArchiveResolver(
-            plist
+        new KeyedArchiveResolver(archive);
+
+    const rootUID =
+        archive.$top?.root?.uid;
+
+    if (rootUID === undefined)
+    {
+        throw new Error(
+            "Racine NSKeyedArchiver absente."
         );
+    }
 
-
-    window.lastArchiveResolver =
-        resolver;
-
-
-    const root =
-        resolver.root();
-
-
-    window.lastArchiveRoot =
-        root;
-
-
-    console.log(
-        "OBJET RACINE NSKEYEDARCHIVER :",
-        root
-    );
-
-
-    return root;
+    // rootUID est déjà le numéro de l'objet.
+    // Il faut donc appeler resolveUID(), pas resolveObject().
+    return resolver.resolveUID(rootUID);
 }
 
 
