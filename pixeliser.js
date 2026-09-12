@@ -2170,6 +2170,16 @@ async function loadGrilleFile(
     console.log(
         "================================"
     );
+
+    console.log(
+    "AVANT DRAW"
+);
+
+draw();
+
+console.log(
+    "APRÈS DRAW"
+);
 }
 
 
