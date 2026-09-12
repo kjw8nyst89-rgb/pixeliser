@@ -2242,9 +2242,11 @@ function imageFromBytes(
 // NSINDEXSET
 // ============================================================
 
-function decodeNSIndexSet(
-    value
-)
+// ============================================================
+// NSINDEXSET
+// ============================================================
+
+function decodeNSIndexSet(value)
 {
     const result =
         new Set();
@@ -2257,7 +2259,7 @@ function decodeNSIndexSet(
 
 
     // --------------------------------------------------------
-    // Cas futur : tableau d'indices
+    // Cas simple : tableau d'indices
     // --------------------------------------------------------
 
     if (Array.isArray(value))
@@ -2267,33 +2269,37 @@ function decodeNSIndexSet(
         )
         {
             if (
-                Number.isInteger(
-                    index
-                )
+                Number.isInteger(index)
             )
             {
-                result.add(
-                    index
-                );
+                result.add(index);
             }
         }
-
 
         return result;
     }
 
+
+    // --------------------------------------------------------
+    // Vérification NSIndexSet
+    // --------------------------------------------------------
 
     if (
         value.type !==
         "NSIndexSet"
     )
     {
+        console.warn(
+            "Objet NSIndexSet inattendu :",
+            value
+        );
+
         return result;
     }
 
 
     console.log(
-        "NSIndexSet count :",
+        "NSIndexSet nombre de plages :",
         value.count
     );
 
@@ -2319,15 +2325,236 @@ function decodeNSIndexSet(
         data.length
     );
 
-    console.log(
-    "NSRangeData HEX :",
-    Array.from(data)
-        .map(
-            b => b.toString(16).padStart(2, "0")
-        )
-        .join(" ")
-);
 
+    // --------------------------------------------------------
+    // PackedUIntSequence
+    //
+    // Apple encode les UInt en base 128.
+    //
+    // Si l'octet est < 128 :
+    //      fin de l'entier
+    //
+    // Si l'octet est >= 128 :
+    //      (octet - 128) est le chiffre courant
+    //      l'octet suivant contient la suite
+    //
+    // Exemple :
+    //
+    // 48 02
+    //
+    // donne :
+    //
+    // 0x48 + 128 * 0x02
+    // = 72 + 256
+    // = 328
+    //
+    // --------------------------------------------------------
+
+    function decodePackedUInt(
+        bytes,
+        offset
+    )
+    {
+        let first =
+            bytes[offset++];
+
+
+        if (
+            first < 128
+        )
+        {
+            return {
+                value: first,
+                nextOffset: offset
+            };
+        }
+
+
+        let value =
+            first - 128;
+
+
+        let multiplier =
+            128;
+
+
+        while (
+            offset <
+            bytes.length
+        )
+        {
+            const byte =
+                bytes[offset++];
+
+
+            if (
+                byte < 128
+            )
+            {
+                value +=
+                    multiplier *
+                    byte;
+
+                return {
+                    value: value,
+                    nextOffset: offset
+                };
+            }
+
+
+            value +=
+                multiplier *
+                (byte - 128);
+
+
+            multiplier *=
+                128;
+        }
+
+
+        throw new Error(
+            "NSRangeData tronqué pendant le décodage PackedUIntSequence."
+        );
+    }
+
+
+    // --------------------------------------------------------
+    // Décodage de tous les UInt
+    // --------------------------------------------------------
+
+    const integers =
+        [];
+
+
+    let offset =
+        0;
+
+
+    while (
+        offset <
+        data.length
+    )
+    {
+        const decoded =
+            decodePackedUInt(
+                data,
+                offset
+            );
+
+
+        integers.push(
+            decoded.value
+        );
+
+
+        offset =
+            decoded.nextOffset;
+    }
+
+
+    console.log(
+        "PackedUIntSequence :",
+        integers.length,
+        "entiers"
+    );
+
+
+    // --------------------------------------------------------
+    // Chaque plage = 2 entiers :
+    //
+    // location
+    // length
+    //
+    // NSRangeCount = nombre de plages
+    // --------------------------------------------------------
+
+    const expectedIntegerCount =
+        value.count * 2;
+
+
+    if (
+        integers.length !==
+        expectedIntegerCount
+    )
+    {
+        console.warn(
+            "Nombre d'entiers inattendu :",
+            integers.length,
+            "attendu :",
+            expectedIntegerCount
+        );
+    }
+
+
+    // --------------------------------------------------------
+    // Conversion des plages en indices individuels
+    // --------------------------------------------------------
+
+    let decodedCount =
+        0;
+
+
+    for (
+        let i = 0;
+        i + 1 < integers.length;
+        i += 2
+    )
+    {
+        const location =
+            integers[i];
+
+
+        const length =
+            integers[i + 1];
+
+
+        console.log(
+            "NSIndexSet range :",
+            location,
+            "+",
+            length
+        );
+
+
+        if (
+            length <= 0
+        )
+        {
+            continue;
+        }
+
+
+        for (
+            let j = 0;
+            j < length;
+            j++
+        )
+        {
+            result.add(
+                location + j
+            );
+        }
+
+
+        decodedCount +=
+            length;
+    }
+
+
+    console.log(
+        "NSIndexSet cases réellement sélectionnées :",
+        decodedCount
+    );
+
+
+    console.log(
+        "Set final :",
+        result.size
+    );
+
+
+    return result;
+}
 
 
 console.log(
