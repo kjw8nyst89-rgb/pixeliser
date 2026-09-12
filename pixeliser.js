@@ -2556,7 +2556,6 @@ function decodeNSIndexSet(value)
     return result;
 }
 
-
 console.log(
     "NSRangeData DEC :",
     Array.from(data)
