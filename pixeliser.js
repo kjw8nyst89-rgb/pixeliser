@@ -2792,8 +2792,28 @@ function recomputeGrid()
 // ============================================================
 // DESSIN
 // ============================================================
-
 function draw()
+{
+    console.log("========== DRAW TEST ==========");
+
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    console.log("canvas :", canvas);
+    console.log("dimensions :", canvas.width, canvas.height);
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = "red";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    console.log(
+        "PIXEL :",
+        ctx.getImageData(10, 10, 1, 1).data
+    );
+}
+function drawOld()
     
 {
     console.log("========== DRAW ==========");
@@ -2841,6 +2861,38 @@ console.log(
 
 const ctx =
     canvas.getContext("2d");
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+ctx.fillStyle = "red";
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+const pixel = ctx.getImageData(10, 10, 1, 1).data;
+
+console.log("PIXEL TEST :", pixel);
+console.log("CANVAS RECT :", canvas.getBoundingClientRect());
+
+console.log(
+    "CANVAS CSS :",
+    getComputedStyle(canvas).display,
+    getComputedStyle(canvas).visibility,
+    getComputedStyle(canvas).opacity,
+    getComputedStyle(canvas).position,
+    getComputedStyle(canvas).zIndex
+);
+
+console.log(
+    "WORKSPACE RECT :",
+    document.getElementById("workspace").getBoundingClientRect()
+);
+
+console.log(
+    "ELEMENT SOUS LE COIN :",
+    document.elementFromPoint(
+        canvas.getBoundingClientRect().left + 10,
+        canvas.getBoundingClientRect().top + 10
+    )
+);
 
 console.log(
     "context 2D :",
