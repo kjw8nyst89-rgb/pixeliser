@@ -513,24 +513,43 @@ class KeyedArchiveResolver {
         return this.resolveUID(rootUID);
     }
 }
-function decodeGrilleArchive(decoded) {
+function decodeGrilleArchive(decoded)
+{
     console.log("================================");
     console.log("DECODAGE BINARY PLIST");
     console.log("Taille :", decoded.length);
     const decoder = new BinaryPlistDecoder(decoded);
-    const plist = decoder.decode();
-    window.lastPlist = plist;
+    const rootObject = decoder.decode();
+    window.lastPlist = rootObject;
     window.lastPlistDecoder = decoder;
-    console.log("Plist décodé :", plist);
-    console.log("Clés plist racine :", Object.keys(plist));
-    if (plist["$archiver"] !== "NSKeyedArchiver") {
-        throw new Error("Archive NSKeyedArchiver attendue.");
+    console.log("Plist décodé :", rootObject);
+    console.log("Clés plist racine :", Object.keys(rootObject));
+    if (!rootObject || !Array.isArray(rootObject["NS.keys"]) || !Array.isArray(rootObject["NS.objects"]))
+    {
+        throw new Error("Racine NSDictionary NSKeyedArchiver invalide.");
     }
-    const resolver = new KeyedArchiveResolver(plist);
+    console.log("Racine NSDictionary NSKeyedArchiver détectée.");
+    const dictionary = {};
+    const keys = rootObject["NS.keys"];
+    const values = rootObject["NS.objects"];
+    if (keys.length !== values.length)
+    {
+        throw new Error("NS.keys et NS.objects ont des tailles différentes.");
+    }
+    for (let i = 0; i < keys.length; i++)
+    {
+        dictionary[keys[i]] = values[i];
+    }
+    console.log("Dictionnaire archive :", dictionary);
+    const resolver = new KeyedArchiveResolver(dictionary);
     window.lastArchiveResolver = resolver;
     const root = resolver.root();
     window.lastArchiveRoot = root;
-    console.log("OBJET RACINE NSKEYEDARCHIVER :", root);
+    console.log("Racine archive résolue :", root);
+    if (!root || typeof root !== "object")
+    {
+        throw new Error("Racine NSKeyedArchiver invalide.");
+    }
     return root;
 }
 function extractGrilleData(root) {
