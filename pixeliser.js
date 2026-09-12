@@ -1,10 +1,17 @@
 import createLZFSEModule from "./lzfse/lzfse.js";
 
-const version = "V5";
+const version = "V6";
 
 // ============================================================
 // VARIABLES GLOBALES
 // ============================================================
+
+let sourceImagePNGBytes = null;
+let colorImagePNGBytes = null;
+let paletteImagePNGBytes = null;
+
+let currentGrilleFileName = "grille.grille";
+
 let lzfseModule = null;
 let sourceImage = null;
 let colorImage = null;
@@ -15,6 +22,7 @@ let cols = 0;
 let rows = 0;
 let tileSize = 20;
 let selectedTiles = new Set();
+
 
 // ============================================================
 // CAMERA
@@ -72,7 +80,7 @@ document.addEventListener("DOMContentLoaded",async function(){
 
     if(saveGrilleButton){
         // Sauvegarde ajoutée plus tard.
-        // saveGrilleButton.addEventListener("click",saveGrille);
+         saveGrilleButton.addEventListener("click",saveGrilleFile);
     }
 
     if(openGrilleButton){
@@ -1379,6 +1387,18 @@ async function loadGrilleFile(file){
     const grilleData=
         extractGrilleData(root);
 
+    sourceImagePNGBytes =
+    new Uint8Array(grilleData.GRILLE);
+
+colorImagePNGBytes =
+    new Uint8Array(grilleData.COULEUR);
+
+paletteImagePNGBytes =
+    new Uint8Array(grilleData.PALETTE);
+
+currentGrilleFileName =
+    file.name;
+    
     window.lastGrilleArchive=
         grilleData;
 
@@ -2916,4 +2936,1304 @@ function clearSelection(){
     console.log(
         "Sélection effacée."
     );
+}
+
+// ============================================================
+// NSKeyedArchiver / Binary Plist ENCODEUR
+// ============================================================
+
+class PlistUID {
+    constructor(value) {
+        this.value = value;
+    }
+}
+
+
+// ------------------------------------------------------------
+// Encodeur Binary Plist
+// ------------------------------------------------------------
+
+class BinaryPlistEncoder {
+
+    constructor(root) {
+        this.root = root;
+        this.objects = [];
+        this.objectMap = new Map();
+    }
+
+    encode() {
+
+        // L'objet racine doit être l'objet 0.
+        this.addObject(this.root);
+
+        const objectCount = this.objects.length;
+
+        let objectRefSize;
+
+        if (objectCount <= 0xFF) {
+            objectRefSize = 1;
+        }
+        else if (objectCount <= 0xFFFF) {
+            objectRefSize = 2;
+        }
+        else if (objectCount <= 0xFFFFFFFF) {
+            objectRefSize = 4;
+        }
+        else {
+            objectRefSize = 8;
+        }
+
+        const objectBytes = [];
+        const offsets = [];
+
+        let currentOffset = 8;       // "bplist00"
+
+        for (let i = 0; i < objectCount; i++) {
+
+            offsets.push(currentOffset);
+
+            const bytes = this.encodeObject(
+                this.objects[i],
+                objectRefSize
+            );
+
+            objectBytes.push(bytes);
+            currentOffset += bytes.length;
+        }
+
+        const offsetTableOffset = currentOffset;
+
+        let maxOffset = 0;
+
+        for (const offset of offsets) {
+            if (offset > maxOffset) {
+                maxOffset = offset;
+            }
+        }
+
+        let offsetIntSize;
+
+        if (maxOffset <= 0xFF) {
+            offsetIntSize = 1;
+        }
+        else if (maxOffset <= 0xFFFF) {
+            offsetIntSize = 2;
+        }
+        else if (maxOffset <= 0xFFFFFFFF) {
+            offsetIntSize = 4;
+        }
+        else {
+            offsetIntSize = 8;
+        }
+
+        const result = [];
+
+        // ----------------------------------------------------
+        // Header
+        // ----------------------------------------------------
+
+        const header = new TextEncoder().encode("bplist00");
+
+        for (const b of header) {
+            result.push(b);
+        }
+
+        // ----------------------------------------------------
+        // Object table
+        // ----------------------------------------------------
+
+        for (const bytes of objectBytes) {
+
+            for (const b of bytes) {
+                result.push(b);
+            }
+        }
+
+        // ----------------------------------------------------
+        // Offset table
+        // ----------------------------------------------------
+
+        for (const offset of offsets) {
+
+            const bytes = this.integerBytes(
+                offset,
+                offsetIntSize
+            );
+
+            for (const b of bytes) {
+                result.push(b);
+            }
+        }
+
+        // ----------------------------------------------------
+        // Trailer
+        // ----------------------------------------------------
+
+        const trailer = new Uint8Array(32);
+
+        trailer[6] = offsetIntSize;
+        trailer[7] = objectRefSize;
+
+        this.writeUInt64BE(
+            trailer,
+            8,
+            objectCount
+        );
+
+        // topObject = 0
+        this.writeUInt64BE(
+            trailer,
+            16,
+            0
+        );
+
+        this.writeUInt64BE(
+            trailer,
+            24,
+            offsetTableOffset
+        );
+
+        for (const b of trailer) {
+            result.push(b);
+        }
+
+        return new Uint8Array(result);
+    }
+
+
+    // --------------------------------------------------------
+    // Ajout d'un objet dans la table
+    // --------------------------------------------------------
+
+    addObject(value) {
+
+        const key = this.objectKey(value);
+
+        if (key !== null && this.objectMap.has(key)) {
+            return this.objectMap.get(key);
+        }
+
+        const index = this.objects.length;
+
+        // Réservation immédiate pour permettre les références.
+        this.objects.push(value);
+
+        if (key !== null) {
+            this.objectMap.set(key, index);
+        }
+
+        return index;
+    }
+
+
+    // --------------------------------------------------------
+    // Clé de déduplication
+    // --------------------------------------------------------
+
+    objectKey(value) {
+
+        if (value instanceof PlistUID) {
+            return null;
+        }
+
+        if (value instanceof Uint8Array) {
+            return null;
+        }
+
+        if (value instanceof ArrayBuffer) {
+            return null;
+        }
+
+        if (typeof value === "string") {
+            return "string:" + value;
+        }
+
+        if (typeof value === "number") {
+            return "number:" + value;
+        }
+
+        if (value === true) {
+            return "bool:true";
+        }
+
+        if (value === false) {
+            return "bool:false";
+        }
+
+        if (value === null) {
+            return "null";
+        }
+
+        return null;
+    }
+
+
+    // --------------------------------------------------------
+    // Encodage d'un objet
+    // --------------------------------------------------------
+
+    encodeObject(value, objectRefSize) {
+
+        // UID
+        if (value instanceof PlistUID) {
+
+            const n = value.value;
+
+            let size;
+
+            if (n <= 0xFF) {
+                size = 1;
+            }
+            else if (n <= 0xFFFF) {
+                size = 2;
+            }
+            else if (n <= 0xFFFFFFFF) {
+                size = 4;
+            }
+            else {
+                size = 8;
+            }
+
+            const result = [];
+
+            result.push(
+                0x80 | (size - 1)
+            );
+
+            const bytes = this.integerBytes(n, size);
+
+            for (const b of bytes) {
+                result.push(b);
+            }
+
+            return new Uint8Array(result);
+        }
+
+
+        // NULL
+        if (value === null) {
+            return new Uint8Array([0x00]);
+        }
+
+
+        // FALSE
+        if (value === false) {
+            return new Uint8Array([0x08]);
+        }
+
+
+        // TRUE
+        if (value === true) {
+            return new Uint8Array([0x09]);
+        }
+
+
+        // Entier
+        if (typeof value === "number") {
+
+            return this.encodeInteger(value);
+        }
+
+
+        // String
+        if (typeof value === "string") {
+
+            return this.encodeString(value);
+        }
+
+
+        // NSData
+        if (value instanceof Uint8Array) {
+
+            return this.encodeData(value);
+        }
+
+
+        if (value instanceof ArrayBuffer) {
+
+            return this.encodeData(
+                new Uint8Array(value)
+            );
+        }
+
+
+        // Array
+        if (Array.isArray(value)) {
+
+            return this.encodeArray(
+                value,
+                objectRefSize
+            );
+        }
+
+
+        // Dictionary
+        if (typeof value === "object") {
+
+            return this.encodeDictionary(
+                value,
+                objectRefSize
+            );
+        }
+
+
+        throw new Error(
+            "Type Binary Plist non supporté : " +
+            typeof value
+        );
+    }
+
+
+    // --------------------------------------------------------
+    // Integer
+    // --------------------------------------------------------
+
+    encodeInteger(value) {
+
+        if (!Number.isSafeInteger(value) || value < 0) {
+            throw new Error(
+                "Entier non supporté : " + value
+            );
+        }
+
+        let size;
+
+        if (value <= 0xFF) {
+            size = 1;
+        }
+        else if (value <= 0xFFFF) {
+            size = 2;
+        }
+        else if (value <= 0xFFFFFFFF) {
+            size = 4;
+        }
+        else {
+            size = 8;
+        }
+
+        let exponent;
+
+        switch (size) {
+            case 1:
+                exponent = 0;
+                break;
+
+            case 2:
+                exponent = 1;
+                break;
+
+            case 4:
+                exponent = 2;
+                break;
+
+            case 8:
+                exponent = 3;
+                break;
+
+            default:
+                throw new Error("Taille entière invalide.");
+        }
+
+        const result = [
+            0x10 | exponent
+        ];
+
+        const bytes = this.integerBytes(
+            value,
+            size
+        );
+
+        for (const b of bytes) {
+            result.push(b);
+        }
+
+        return new Uint8Array(result);
+    }
+
+
+    // --------------------------------------------------------
+    // String ASCII / UTF-8
+    // --------------------------------------------------------
+
+    encodeString(value) {
+
+        let ascii = true;
+
+        for (let i = 0; i < value.length; i++) {
+
+            if (value.charCodeAt(i) > 0x7F) {
+                ascii = false;
+                break;
+            }
+        }
+
+        if (ascii) {
+
+            const data = new TextEncoder().encode(value);
+
+            return this.encodeLengthAndPayload(
+                0x50,
+                data
+            );
+        }
+
+        // UTF-16BE pour les chaînes non ASCII.
+        const data = [];
+
+        for (let i = 0; i < value.length; i++) {
+
+            const c = value.charCodeAt(i);
+
+            data.push((c >> 8) & 0xFF);
+            data.push(c & 0xFF);
+        }
+
+        return this.encodeLengthAndPayload(
+            0x60,
+            new Uint8Array(data)
+        );
+    }
+
+
+    // --------------------------------------------------------
+    // NSData
+    // --------------------------------------------------------
+
+    encodeData(data) {
+
+        return this.encodeLengthAndPayload(
+            0x40,
+            data
+        );
+    }
+
+
+    // --------------------------------------------------------
+    // Array
+    // --------------------------------------------------------
+
+    encodeArray(array, objectRefSize) {
+
+        const refs = [];
+
+        for (const value of array) {
+
+            refs.push(
+                this.addObject(value)
+            );
+        }
+
+        const result = [];
+
+        this.appendLengthMarker(
+            result,
+            0xA0,
+            refs.length
+        );
+
+        for (const ref of refs) {
+
+            const bytes = this.integerBytes(
+                ref,
+                objectRefSize
+            );
+
+            for (const b of bytes) {
+                result.push(b);
+            }
+        }
+
+        return new Uint8Array(result);
+    }
+
+
+    // --------------------------------------------------------
+    // Dictionary
+    // --------------------------------------------------------
+
+    encodeDictionary(dictionary, objectRefSize) {
+
+        const keys = Object.keys(dictionary);
+
+        const keyRefs = [];
+        const valueRefs = [];
+
+        for (const key of keys) {
+
+            keyRefs.push(
+                this.addObject(key)
+            );
+
+            valueRefs.push(
+                this.addObject(dictionary[key])
+            );
+        }
+
+        const result = [];
+
+        this.appendLengthMarker(
+            result,
+            0xD0,
+            keys.length
+        );
+
+        // Toutes les clés
+        for (const ref of keyRefs) {
+
+            const bytes = this.integerBytes(
+                ref,
+                objectRefSize
+            );
+
+            for (const b of bytes) {
+                result.push(b);
+            }
+        }
+
+        // Toutes les valeurs
+        for (const ref of valueRefs) {
+
+            const bytes = this.integerBytes(
+                ref,
+                objectRefSize
+            );
+
+            for (const b of bytes) {
+                result.push(b);
+            }
+        }
+
+        return new Uint8Array(result);
+    }
+
+
+    // --------------------------------------------------------
+    // Marker + longueur + données
+    // --------------------------------------------------------
+
+    encodeLengthAndPayload(marker, data) {
+
+        const result = [];
+
+        this.appendLengthMarker(
+            result,
+            marker,
+            data.length
+        );
+
+        for (const b of data) {
+            result.push(b);
+        }
+
+        return new Uint8Array(result);
+    }
+
+
+    // --------------------------------------------------------
+    // Marker avec longueur
+    // --------------------------------------------------------
+
+    appendLengthMarker(result, marker, length) {
+
+        if (length < 15) {
+
+            result.push(
+                marker | length
+            );
+
+            return;
+        }
+
+        result.push(
+            marker | 0x0F
+        );
+
+        const integerBytes = this.encodeInteger(
+            length
+        );
+
+        for (const b of integerBytes) {
+            result.push(b);
+        }
+    }
+
+
+    // --------------------------------------------------------
+    // Entiers Big Endian
+    // --------------------------------------------------------
+
+    integerBytes(value, size) {
+
+        const result = new Uint8Array(size);
+
+        let n = BigInt(value);
+
+        for (let i = size - 1; i >= 0; i--) {
+
+            result[i] = Number(
+                n & 0xFFn
+            );
+
+            n >>= 8n;
+        }
+
+        return result;
+    }
+
+
+    writeUInt64BE(buffer, offset, value) {
+
+        let n = BigInt(value);
+
+        for (let i = 7; i >= 0; i--) {
+
+            buffer[offset + i] = Number(
+                n & 0xFFn
+            );
+
+            n >>= 8n;
+        }
+    }
+}
+
+
+// ============================================================
+// NSKeyedArchiver
+// ============================================================
+
+function buildNSKeyedArchive(
+    grilleBytes,
+    couleurBytes,
+    paletteBytes,
+    selectedIndexes,
+    tileSize
+) {
+
+    const objects = [
+        "$null"
+    ];
+
+
+    // --------------------------------------------------------
+    // Ajout d'un objet dans $objects
+    // --------------------------------------------------------
+
+    function addObject(object) {
+
+        const index = objects.length;
+
+        objects.push(object);
+
+        return new PlistUID(index);
+    }
+
+
+    // --------------------------------------------------------
+    // Classes NSKeyedArchiver
+    // --------------------------------------------------------
+
+    const nsDataClass = addObject({
+        "$classes": [
+            "NSData",
+            "NSObject"
+        ],
+        "$classname": "NSData"
+    });
+
+
+    const nsIndexSetClass = addObject({
+        "$classes": [
+            "NSIndexSet",
+            "NSObject"
+        ],
+        "$classname": "NSIndexSet"
+    });
+
+
+    const nsDictionaryClass = addObject({
+        "$classes": [
+            "NSDictionary",
+            "NSObject"
+        ],
+        "$classname": "NSDictionary"
+    });
+
+
+    // --------------------------------------------------------
+    // NSData
+    // --------------------------------------------------------
+
+    function addNSData(bytes) {
+
+        if (!(bytes instanceof Uint8Array)) {
+
+            bytes = new Uint8Array(bytes);
+        }
+
+        return addObject({
+            "NS.data": bytes,
+            "$class": nsDataClass
+        });
+    }
+
+
+    // --------------------------------------------------------
+    // NSNumber / entier
+    //
+    // Pour notre archive, les nombres peuvent être directement
+    // placés dans $objects.
+    // --------------------------------------------------------
+
+    function addNumber(value) {
+
+        return addObject(
+            Number(value)
+        );
+    }
+
+
+    // --------------------------------------------------------
+    // Encodage du UInt variable utilisé par NSIndexSet
+    // --------------------------------------------------------
+
+    function encodePackedUInt(value) {
+
+        if (
+            !Number.isSafeInteger(value) ||
+            value < 0
+        ) {
+            throw new Error(
+                "Valeur NSIndexSet invalide : " + value
+            );
+        }
+
+        const bytes = [];
+
+        if (value < 128) {
+
+            bytes.push(value);
+
+            return bytes;
+        }
+
+        while (value >= 128) {
+
+            bytes.push(
+                128 + (value % 128)
+            );
+
+            value = Math.floor(
+                value / 128
+            );
+        }
+
+        bytes.push(value);
+
+        return bytes;
+    }
+
+
+    // --------------------------------------------------------
+    // Transformation du Set en plages
+    //
+    // Exemple :
+    // 10,11,12,13,20,21
+    //
+    // devient :
+    // 10 / 4
+    // 20 / 2
+    // --------------------------------------------------------
+
+    function buildRanges(indexes) {
+
+        const values = Array.from(indexes)
+            .map(Number)
+            .filter(Number.isSafeInteger)
+            .filter(v => v >= 0)
+            .sort((a, b) => a - b);
+
+        const ranges = [];
+
+        if (values.length === 0) {
+            return ranges;
+        }
+
+        let start = values[0];
+        let previous = values[0];
+
+        for (let i = 1; i < values.length; i++) {
+
+            const current = values[i];
+
+            if (current === previous + 1) {
+
+                previous = current;
+                continue;
+            }
+
+            ranges.push({
+                start: start,
+                length: previous - start + 1
+            });
+
+            start = current;
+            previous = current;
+        }
+
+        ranges.push({
+            start: start,
+            length: previous - start + 1
+        });
+
+        return ranges;
+    }
+
+
+    // --------------------------------------------------------
+    // NSIndexSet
+    // --------------------------------------------------------
+
+    function addNSIndexSet(indexes) {
+
+        const ranges = buildRanges(indexes);
+
+        const packed = [];
+
+        for (const range of ranges) {
+
+            const startBytes =
+                encodePackedUInt(range.start);
+
+            const lengthBytes =
+                encodePackedUInt(range.length);
+
+            for (const b of startBytes) {
+                packed.push(b);
+            }
+
+            for (const b of lengthBytes) {
+                packed.push(b);
+            }
+        }
+
+        const rangeData = new Uint8Array(packed);
+
+        const rangeCountUID =
+            addNumber(ranges.length);
+
+        const rangeDataUID =
+            addNSData(rangeData);
+
+        return addObject({
+            "NSRangeCount": rangeCountUID,
+            "NSRangeData": rangeDataUID,
+            "$class": nsIndexSetClass
+        });
+    }
+
+
+    // --------------------------------------------------------
+    // Les données
+    // --------------------------------------------------------
+
+    const grilleUID =
+        addNSData(grilleBytes);
+
+    const couleurUID =
+        addNSData(couleurBytes);
+
+    const paletteUID =
+        addNSData(paletteBytes);
+
+
+    // --------------------------------------------------------
+    // ENCOURS
+    // --------------------------------------------------------
+
+    const encoursUID =
+        addNSIndexSet(selectedIndexes);
+
+
+    // --------------------------------------------------------
+    // TILESIZE
+    // --------------------------------------------------------
+
+    const storedTileSize =
+        Math.max(
+            1,
+            Math.round(tileSize)
+        );
+
+    const tileSizeUID =
+        addNumber(storedTileSize);
+
+
+    // --------------------------------------------------------
+    // TILEORIGIN
+    // --------------------------------------------------------
+
+    const tileOriginUID =
+        addNumber(1);
+
+
+    // --------------------------------------------------------
+    // Objet racine NSDictionary
+    // --------------------------------------------------------
+
+    const rootUID =
+        addObject({
+            "GRILLE": grilleUID,
+            "COULEUR": couleurUID,
+            "PALETTE": paletteUID,
+            "ENCOURS": encoursUID,
+            "TILESIZE": tileSizeUID,
+            "TILEORIGIN": tileOriginUID,
+            "$class": nsDictionaryClass
+        });
+
+
+    // --------------------------------------------------------
+    // Structure NSKeyedArchiver
+    // --------------------------------------------------------
+
+    const plist = {
+
+        "$version": 100000,
+
+        "$archiver": "NSKeyedArchiver",
+
+        "$top": {
+            "root": rootUID
+        },
+
+        "$objects": objects
+    };
+
+
+    // --------------------------------------------------------
+    // Binary plist
+    // --------------------------------------------------------
+
+    const encoder =
+        new BinaryPlistEncoder(plist);
+
+    return encoder.encode();
+}
+
+
+// ============================================================
+// Construction du fichier .grille
+// ============================================================
+
+function buildGrilleFile(
+    grilleBytes,
+    couleurBytes,
+    paletteBytes,
+    selectedIndexes,
+    tileSize
+) {
+
+    console.log(
+        "Construction de l'archive NSKeyedArchiver..."
+    );
+
+
+    const archive =
+        buildNSKeyedArchive(
+            grilleBytes,
+            couleurBytes,
+            paletteBytes,
+            selectedIndexes,
+            tileSize
+        );
+
+
+    console.log(
+        "Archive NSKeyedArchiver :",
+        archive.length,
+        "octets"
+    );
+
+
+    // --------------------------------------------------------
+    // Compression LZFSE
+    // --------------------------------------------------------
+
+    const compressed =
+        encodeLZFSE(archive);
+
+
+    console.log(
+        "Archive LZFSE :",
+        compressed.length,
+        "octets"
+    );
+
+
+    // --------------------------------------------------------
+    // 8 premiers octets :
+    //
+    // taille originale de l'archive NSKeyedArchiver
+    //
+    // UInt64 little endian
+    // --------------------------------------------------------
+
+    const output =
+        new Uint8Array(
+            8 + compressed.length
+        );
+
+
+    const view =
+        new DataView(output.buffer);
+
+
+    view.setBigUint64(
+        0,
+        BigInt(archive.length),
+        true
+    );
+
+
+    output.set(
+        compressed,
+        8
+    );
+
+
+    console.log(
+        "Fichier .grille final :",
+        output.length,
+        "octets"
+    );
+
+
+    return output;
+}
+
+
+// ============================================================
+// Sauvegarde d'une grille
+// ============================================================
+
+async function saveGrilleFile() {
+
+    try {
+
+        if (!lzfseModule) {
+
+            throw new Error(
+                "Le module LZFSE n'est pas prêt."
+            );
+        }
+
+
+        if (
+            typeof sourceImagePNGBytes === "undefined" ||
+            !sourceImagePNGBytes
+        ) {
+
+            throw new Error(
+                "Les données PNG de GRILLE ne sont pas disponibles."
+            );
+        }
+
+
+        if (
+            typeof colorImagePNGBytes === "undefined" ||
+            !colorImagePNGBytes
+        ) {
+
+            throw new Error(
+                "Les données PNG de COULEUR ne sont pas disponibles."
+            );
+        }
+
+
+        if (
+            typeof paletteImagePNGBytes === "undefined" ||
+            !paletteImagePNGBytes
+        ) {
+
+            throw new Error(
+                "Les données PNG de PALETTE ne sont pas disponibles."
+            );
+        }
+
+
+        // ----------------------------------------------------
+        // ENCOURS
+        //
+        // On récupère les cases sélectionnées dans le modèle
+        // existant.
+        // ----------------------------------------------------
+
+        let selectedIndexes = new Set();
+
+
+        if (
+            typeof _gridView !== "undefined" &&
+            _gridView &&
+            _gridView.selectedIndexes
+        ) {
+
+            selectedIndexes =
+                _gridView.selectedIndexes;
+        }
+
+
+        // ----------------------------------------------------
+        // TILESIZE
+        //
+        // Le fichier Mac stocke la valeur divisée par 2.
+        // L'affichage iPad utilise donc tileSize * 2.
+        // ----------------------------------------------------
+
+        let displayTileSize = 20;
+
+
+        if (
+            typeof _gridView !== "undefined" &&
+            _gridView &&
+            Number.isFinite(_gridView.tileSize)
+        ) {
+
+            displayTileSize =
+                _gridView.tileSize;
+        }
+
+
+        const storedTileSize =
+            Math.max(
+                1,
+                Math.round(displayTileSize / 2)
+            );
+
+
+        // ----------------------------------------------------
+        // Construction
+        // ----------------------------------------------------
+
+        const grilleFile =
+            buildGrilleFile(
+                new Uint8Array(sourceImagePNGBytes),
+                new Uint8Array(colorImagePNGBytes),
+                new Uint8Array(paletteImagePNGBytes),
+                selectedIndexes,
+                storedTileSize
+            );
+
+
+        // ----------------------------------------------------
+        // Nom du fichier
+        // ----------------------------------------------------
+
+        let filename =
+            "grille.grille";
+
+
+        if (
+            typeof currentGrilleFileName !== "undefined" &&
+            currentGrilleFileName
+        ) {
+
+            filename =
+                currentGrilleFileName;
+        }
+
+
+        if (
+            !filename.toLowerCase().endsWith(".grille")
+        ) {
+
+            filename += ".grille";
+        }
+
+
+        const file =
+            new File(
+                [grilleFile],
+                filename,
+                {
+                    type:
+                        "application/octet-stream"
+                }
+            );
+
+
+        // ----------------------------------------------------
+        // iPad / iOS :
+        // utiliser la feuille de partage si disponible.
+        // ----------------------------------------------------
+
+        if (
+            navigator.share &&
+            navigator.canShare &&
+            navigator.canShare({
+                files: [file]
+            })
+        ) {
+
+            console.log(
+                "Ouverture de la feuille de partage iPad..."
+            );
+
+            await navigator.share({
+                files: [file],
+                title: filename
+            });
+
+            console.log(
+                "Sauvegarde/partage terminé."
+            );
+
+            return;
+        }
+
+
+        // ----------------------------------------------------
+        // Safari / Mac
+        // ----------------------------------------------------
+
+        const url =
+            URL.createObjectURL(file);
+
+
+        const a =
+            document.createElement("a");
+
+        a.href = url;
+        a.download = filename;
+
+        document.body.appendChild(a);
+
+        a.click();
+
+        a.remove();
+
+
+        setTimeout(
+            () => URL.revokeObjectURL(url),
+            1000
+        );
+
+
+        console.log(
+            "Téléchargement déclenché :",
+            filename
+        );
+
+    }
+    catch (error) {
+
+        console.error(
+            "ERREUR SAUVEGARDE :",
+            error
+        );
+
+        alert(
+            "Impossible de sauvegarder la grille :\n\n" +
+            error.message
+        );
+    }
 }
