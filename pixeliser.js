@@ -58,7 +58,7 @@ document.addEventListener("DOMContentLoaded",async function(){
     const grilleInput=document.getElementById("grilleInput");
     const saveGrilleButton = document.getElementById("saveGrilleButton");
     if(saveGrilleButton){ 
-        saveGrilleButton.addEventListener("click", saveGrille);
+    //    saveGrilleButton.addEventListener("click", saveGrille);
     }
     if(openGrilleButton){
         openGrilleButton.addEventListener("click",function(){
