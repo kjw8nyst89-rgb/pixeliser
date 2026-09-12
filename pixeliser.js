@@ -2176,8 +2176,88 @@ async function loadGrilleFile(
 // ============================================================
 // NSData -> IMAGE
 // ============================================================
+function imageFromBytes(bytes)
+{
+    return new Promise((resolve, reject) =>
+    {
+        console.log(
+            "imageFromBytes : début, taille =",
+            bytes ? bytes.length : null
+        );
 
-function imageFromBytes(
+        if (!(bytes instanceof Uint8Array))
+        {
+            console.error(
+                "imageFromBytes : ce n'est pas un Uint8Array",
+                bytes
+            );
+
+            reject(
+                new Error("Données image invalides")
+            );
+
+            return;
+        }
+
+        const blob =
+            new Blob(
+                [bytes],
+                {
+                    type: "image/png"
+                }
+            );
+
+        console.log(
+            "imageFromBytes : Blob créé",
+            blob.size,
+            blob.type
+        );
+
+        const url =
+            URL.createObjectURL(blob);
+
+        console.log(
+            "imageFromBytes : URL",
+            url
+        );
+
+        const img =
+            new Image();
+
+        img.onload = () =>
+        {
+            console.log(
+                "imageFromBytes : IMAGE CHARGÉE",
+                img.width,
+                "x",
+                img.height
+            );
+
+            URL.revokeObjectURL(url);
+
+            resolve(img);
+        };
+
+        img.onerror = (event) =>
+        {
+            console.error(
+                "imageFromBytes : ERREUR CHARGEMENT IMAGE",
+                event
+            );
+
+            URL.revokeObjectURL(url);
+
+            reject(
+                new Error(
+                    "Impossible de décoder le PNG"
+                )
+            );
+        };
+
+        img.src = url;
+    });
+}
+function imageFromBytesOld(
     bytes
 )
 {
