@@ -2552,7 +2552,6 @@ function decodeNSIndexSet(value)
         result.size
     );
 
-
     return result;
 }
 
