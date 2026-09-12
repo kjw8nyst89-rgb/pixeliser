@@ -1,5 +1,6 @@
 import createLZFSEModule from "./lzfse/lzfse.js";
 
+const version = "V3" 
 
 // ============================================================
 // VARIABLES GLOBALES
@@ -68,7 +69,9 @@ document.addEventListener(
         console.log(
             "Pixeliser démarrage..."
         );
-
+         console.log(
+            "Version ",version) ;
+        );
 
         canvas =
             document.getElementById(
