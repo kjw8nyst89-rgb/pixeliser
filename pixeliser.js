@@ -1,5 +1,5 @@
 import createLZFSEModule from "./lzfse/lzfse.js";
-const version = "V4-interactions-corrigees";
+const version = "V5";
 // ============================================================
 // VARIABLES GLOBALES
 // ============================================================
