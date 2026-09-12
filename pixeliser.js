@@ -42,29 +42,7 @@ document.addEventListener(
 
         canvas =
             document.getElementById("canvas");
-canvas.style.position = "fixed";
-canvas.style.left = "0px";
-canvas.style.top = "54px";
-canvas.style.width = "300px";
-canvas.style.height = "300px";
-canvas.style.zIndex = "99999";
-canvas.style.display = "block";
-canvas.style.visibility = "visible";
-canvas.style.opacity = "1";
 
-canvas.width = 300;
-canvas.height = 300;
-
-const testCtx = canvas.getContext("2d");
-
-testCtx.fillStyle = "red";
-testCtx.fillRect(0, 0, 300, 300);
-
-console.log("=== TEST CANVAS ===");
-console.log("canvas =", canvas);
-console.log("rect =", canvas.getBoundingClientRect());
-console.log("pixel =", testCtx.getImageData(10, 10, 1, 1).data);
-console.log("element =", document.elementFromPoint(10, 64));
 
         if (!canvas)
         {
