@@ -21,9 +21,26 @@ let tileSize = 20;
 
 let selectedTiles = new Set();
 
+
+// ------------------------------------------------------------
+// Caméra
+// ------------------------------------------------------------
+
 let zoomFactor = 1.0;
 
+let panX = 0;
+let panY = 0;
+
+
+// ------------------------------------------------------------
+// Touch
+// ------------------------------------------------------------
+
 let lastTouchDistance = 0;
+
+let lastPinchCenterX = 0;
+let lastPinchCenterY = 0;
+
 let touchStartX = 0;
 let touchStartY = 0;
 
@@ -38,10 +55,15 @@ document.addEventListener(
     "DOMContentLoaded",
     async function ()
     {
-        console.log("Pixeliser démarrage...");
+        console.log(
+            "Pixeliser démarrage..."
+        );
+
 
         canvas =
-            document.getElementById("canvas");
+            document.getElementById(
+                "canvas"
+            );
 
 
         if (!canvas)
@@ -53,8 +75,12 @@ document.addEventListener(
             return;
         }
 
+
         ctx =
-            canvas.getContext("2d");
+            canvas.getContext(
+                "2d"
+            );
+
 
         if (!ctx)
         {
@@ -101,6 +127,10 @@ document.addEventListener(
             );
 
 
+        // ----------------------------------------------------
+        // Ouvrir image
+        // ----------------------------------------------------
+
         if (openButton)
         {
             openButton.addEventListener(
@@ -133,6 +163,10 @@ document.addEventListener(
         }
 
 
+        // ----------------------------------------------------
+        // Ouvrir grille
+        // ----------------------------------------------------
+
         if (openGrilleButton)
         {
             openGrilleButton.addEventListener(
@@ -159,6 +193,7 @@ document.addEventListener(
                         return;
                     }
 
+
                     try
                     {
                         await loadGrilleFile(
@@ -172,6 +207,7 @@ document.addEventListener(
                             error
                         );
 
+
                         alert(
                             "Erreur lecture grille :\n" +
                             error.message
@@ -182,6 +218,10 @@ document.addEventListener(
         }
 
 
+        // ----------------------------------------------------
+        // Effacer
+        // ----------------------------------------------------
+
         if (clearButton)
         {
             clearButton.addEventListener(
@@ -190,6 +230,10 @@ document.addEventListener(
             );
         }
 
+
+        // ----------------------------------------------------
+        // Taille des cases
+        // ----------------------------------------------------
 
         if (tileSizeInput)
         {
@@ -203,18 +247,25 @@ document.addEventListener(
                             10
                         );
 
+
                     if (
-                        !Number.isFinite(value) ||
+                        !Number.isFinite(
+                            value
+                        ) ||
                         value < 2
                     )
                     {
                         return;
                     }
 
+
                     tileSize =
                         value;
 
+
                     recomputeGrid();
+
+                    resetCamera();
 
                     draw();
                 }
@@ -234,6 +285,7 @@ document.addEventListener(
             }
         );
 
+
         canvas.addEventListener(
             "touchmove",
             handleTouchMove,
@@ -242,8 +294,18 @@ document.addEventListener(
             }
         );
 
+
         canvas.addEventListener(
             "touchend",
+            handleTouchEnd,
+            {
+                passive: false
+            }
+        );
+
+
+        canvas.addEventListener(
+            "touchcancel",
             handleTouchEnd,
             {
                 passive: false
@@ -271,6 +333,131 @@ document.addEventListener(
 
 
 // ============================================================
+// CAMERA
+// ============================================================
+
+function resetCamera()
+{
+    if (!canvas)
+    {
+        return;
+    }
+
+
+    const workspace =
+        document.getElementById(
+            "workspace"
+        );
+
+
+    if (!workspace)
+    {
+        zoomFactor = 1.0;
+        panX = 0;
+        panY = 0;
+
+        return;
+    }
+
+
+    const workspaceRect =
+        workspace.getBoundingClientRect();
+
+
+    if (
+        canvas.width <= 0 ||
+        canvas.height <= 0
+    )
+    {
+        zoomFactor = 1.0;
+        panX = 0;
+        panY = 0;
+
+        return;
+    }
+
+
+    // --------------------------------------------------------
+    // Ajustement initial pour faire tenir la grille
+    // dans la zone de travail.
+    //
+    // On garde une petite marge.
+    // --------------------------------------------------------
+
+    const margin = 20;
+
+
+    const availableWidth =
+        Math.max(
+            1,
+            workspaceRect.width -
+            margin * 2
+        );
+
+
+    const availableHeight =
+        Math.max(
+            1,
+            workspaceRect.height -
+            margin * 2
+        );
+
+
+    const scaleX =
+        availableWidth /
+        canvas.width;
+
+
+    const scaleY =
+        availableHeight /
+        canvas.height;
+
+
+    zoomFactor =
+        Math.min(
+            1.0,
+            scaleX,
+            scaleY
+        );
+
+
+    // --------------------------------------------------------
+    // Centrage
+    // --------------------------------------------------------
+
+    panX =
+        (
+            workspaceRect.width -
+            canvas.width * zoomFactor
+        ) *
+        0.5;
+
+
+    panY =
+        (
+            workspaceRect.height -
+            canvas.height * zoomFactor
+        ) *
+        0.5;
+
+
+    console.log(
+        "Camera reset :",
+        {
+            zoom:
+                zoomFactor,
+
+            panX:
+                panX,
+
+            panY:
+                panY
+        }
+    );
+}
+
+
+// ============================================================
 // LZFSE
 // ============================================================
 
@@ -280,10 +467,12 @@ async function initializeLZFSE()
         "Chargement du module LZFSE..."
     );
 
+
     try
     {
         const module =
             await createLZFSEModule();
+
 
         console.log(
             "Module LZFSE créé :",
@@ -331,6 +520,7 @@ async function initializeLZFSE()
             error
         );
 
+
         throw error;
     }
 }
@@ -353,10 +543,12 @@ async function decompressLZFSE(
         "Décompression LZFSE via MEMFS..."
     );
 
+
     console.log(
         "Compressed :",
         compressed.length
     );
+
 
     console.log(
         "Expected :",
@@ -504,6 +696,7 @@ class BinaryPlistDecoder
     {
         let value = 0;
 
+
         for (
             let i = 0;
             i < size;
@@ -517,20 +710,25 @@ class BinaryPlistDecoder
                 ];
         }
 
+
         return value;
     }
 
 
-    readDoubleBE(offset)
+    readDoubleBE(
+        offset
+    )
     {
         const buffer =
             this.bytes.buffer.slice(
                 this.bytes.byteOffset +
                 offset,
+
                 this.bytes.byteOffset +
                 offset +
                 8
             );
+
 
         return new DataView(
             buffer
@@ -566,7 +764,9 @@ class BinaryPlistDecoder
             );
 
 
-        if (magic !== "bplist00")
+        if (
+            magic !== "bplist00"
+        )
         {
             throw new Error(
                 "Ce fichier n'est pas un binary plist."
@@ -675,7 +875,9 @@ class BinaryPlistDecoder
     }
 
 
-    decodeObject(ref)
+    decodeObject(
+        ref
+    )
     {
         if (
             ref < 0 ||
@@ -700,11 +902,14 @@ class BinaryPlistDecoder
         const offset =
             this.offsets[ref];
 
+
         const marker =
             this.bytes[offset];
 
+
         const type =
             marker >> 4;
+
 
         const info =
             marker & 0x0F;
@@ -851,8 +1056,11 @@ class BinaryPlistDecoder
         )
         {
             return {
-                length: info,
-                offset: offset + 1
+                length:
+                    info,
+
+                offset:
+                    offset + 1
             };
         }
 
@@ -866,11 +1074,14 @@ class BinaryPlistDecoder
         const type =
             marker >> 4;
 
+
         const integerInfo =
             marker & 0x0F;
 
 
-        if (type !== 0x1)
+        if (
+            type !== 0x1
+        )
         {
             throw new Error(
                 "Longueur plist invalide."
@@ -890,7 +1101,9 @@ class BinaryPlistDecoder
 
 
         return {
-            length: length,
+            length:
+                length,
+
             offset:
                 offset +
                 2 +
@@ -899,7 +1112,9 @@ class BinaryPlistDecoder
     }
 
 
-    decodeSimple(info)
+    decodeSimple(
+        info
+    )
     {
         switch (info)
         {
@@ -915,7 +1130,8 @@ class BinaryPlistDecoder
             default:
 
                 return {
-                    plistSimple: info
+                    plistSimple:
+                        info
                 };
         }
     }
@@ -946,7 +1162,9 @@ class BinaryPlistDecoder
             1 << info;
 
 
-        if (byteCount === 4)
+        if (
+            byteCount === 4
+        )
         {
             const buffer =
                 this.bytes.buffer.slice(
@@ -967,7 +1185,9 @@ class BinaryPlistDecoder
         }
 
 
-        if (byteCount === 8)
+        if (
+            byteCount === 8
+        )
         {
             return this.readDoubleBE(
                 offset + 1
@@ -986,7 +1206,9 @@ class BinaryPlistDecoder
         offset
     )
     {
-        if (info !== 0x3)
+        if (
+            info !== 0x3
+        )
         {
             throw new Error(
                 "DATE plist invalide."
@@ -1041,11 +1263,12 @@ class BinaryPlistDecoder
             i++
         )
         {
-            text += String.fromCharCode(
-                this.bytes[
-                    result.offset + i
-                ]
-            );
+            text +=
+                String.fromCharCode(
+                    this.bytes[
+                        result.offset + i
+                    ]
+                );
         }
 
 
@@ -1080,13 +1303,16 @@ class BinaryPlistDecoder
 
 
             const code =
-                (this.bytes[p] << 8) |
+                (
+                    this.bytes[p] << 8
+                ) |
                 this.bytes[p + 1];
 
 
-            text += String.fromCharCode(
-                code
-            );
+            text +=
+                String.fromCharCode(
+                    code
+                );
         }
 
 
@@ -1121,7 +1347,8 @@ class BinaryPlistDecoder
 
 
         return {
-            uid: value
+            uid:
+                value
         };
     }
 
@@ -1197,10 +1424,15 @@ class BinaryPlistDecoder
 
 
         const keyRefs =
-            new Array(count);
+            new Array(
+                count
+            );
+
 
         const valueRefs =
-            new Array(count);
+            new Array(
+                count
+            );
 
 
         for (
@@ -1214,6 +1446,7 @@ class BinaryPlistDecoder
                     pos,
                     this.objectRefSize
                 );
+
 
             pos +=
                 this.objectRefSize;
@@ -1231,6 +1464,7 @@ class BinaryPlistDecoder
                     pos,
                     this.objectRefSize
                 );
+
 
             pos +=
                 this.objectRefSize;
@@ -1272,7 +1506,9 @@ class BinaryPlistDecoder
 // NSKEYEDARCHIVER
 // ============================================================
 
-function isUID(value)
+function isUID(
+    value
+)
 {
     return (
         value &&
@@ -1287,13 +1523,17 @@ function isUID(value)
 
 class KeyedArchiveResolver
 {
-    constructor(plist)
+    constructor(
+        plist
+    )
     {
         this.plist =
             plist;
 
+
         this.objects =
             plist["$objects"];
+
 
         if (
             !Array.isArray(
@@ -1310,14 +1550,21 @@ class KeyedArchiveResolver
         this.cache =
             new Map();
 
+
         this.resolving =
             new Set();
     }
 
 
-    resolveUID(uidObject)
+    resolveUID(
+        uidObject
+    )
     {
-        if (!isUID(uidObject))
+        if (
+            !isUID(
+                uidObject
+            )
+        )
         {
             return uidObject;
         }
@@ -1329,7 +1576,9 @@ class KeyedArchiveResolver
     }
 
 
-    resolveIndex(index)
+    resolveIndex(
+        index
+    )
     {
         if (
             index < 0 ||
@@ -1344,7 +1593,9 @@ class KeyedArchiveResolver
 
 
         if (
-            this.cache.has(index)
+            this.cache.has(
+                index
+            )
         )
         {
             return this.cache.get(
@@ -1354,11 +1605,14 @@ class KeyedArchiveResolver
 
 
         if (
-            this.resolving.has(index)
+            this.resolving.has(
+                index
+            )
         )
         {
             return {
-                "$circularUID": index
+                "$circularUID":
+                    index
             };
         }
 
@@ -1376,6 +1630,7 @@ class KeyedArchiveResolver
                 index,
                 null
             );
+
 
             return null;
         }
@@ -1414,9 +1669,15 @@ class KeyedArchiveResolver
     }
 
 
-    resolveObject(object)
+    resolveObject(
+        object
+    )
     {
-        if (isUID(object))
+        if (
+            isUID(
+                object
+            )
+        )
         {
             return this.resolveIndex(
                 object.uid
@@ -1424,7 +1685,11 @@ class KeyedArchiveResolver
         }
 
 
-        if (Array.isArray(object))
+        if (
+            Array.isArray(
+                object
+            )
+        )
         {
             return object.map(
                 value =>
@@ -1463,13 +1728,14 @@ class KeyedArchiveResolver
 
         if (
             object["NSRangeCount"] !==
-            undefined &&
+                undefined &&
             object["NSRangeData"] !==
-            undefined
+                undefined
         )
         {
             return {
-                type: "NSIndexSet",
+                type:
+                    "NSIndexSet",
 
                 count:
                     object["NSRangeCount"],
@@ -1483,7 +1749,7 @@ class KeyedArchiveResolver
 
 
         // ----------------------------------------------------
-        // NSDictionary NSKeyedArchiver
+        // NSDictionary
         // ----------------------------------------------------
 
         if (
@@ -1501,6 +1767,7 @@ class KeyedArchiveResolver
             const keys =
                 object["NS.keys"];
 
+
             const values =
                 object["NS.objects"];
 
@@ -1515,6 +1782,7 @@ class KeyedArchiveResolver
                     this.resolveObject(
                         keys[i]
                     );
+
 
                 const value =
                     this.resolveObject(
@@ -1544,7 +1812,9 @@ class KeyedArchiveResolver
             )
         )
         {
-            if (key === "$class")
+            if (
+                key === "$class"
+            )
             {
                 continue;
             }
@@ -1612,9 +1882,11 @@ function decodeGrilleArchive(
         "================================"
     );
 
+
     console.log(
         "DECODAGE BINARY PLIST"
     );
+
 
     console.log(
         "Taille :",
@@ -1635,6 +1907,7 @@ function decodeGrilleArchive(
     window.lastPlist =
         plist;
 
+
     window.lastPlistDecoder =
         decoder;
 
@@ -1647,7 +1920,9 @@ function decodeGrilleArchive(
 
     console.log(
         "Clés plist racine :",
-        Object.keys(plist)
+        Object.keys(
+            plist
+        )
     );
 
 
@@ -1691,28 +1966,27 @@ function decodeGrilleArchive(
 
 
 // ============================================================
-// EXTRACTION DES DONNEES GRILLE
+// EXTRACTION DONNÉES GRILLE
 // ============================================================
 
-// ============================================================
-// EXTRACTION DES DONNÉES DE LA GRILLE
-// ============================================================
-
-// ============================================================
-// EXTRACTION DES DONNÉES DE LA GRILLE
-// ============================================================
-
-function extractGrilleData(root)
+function extractGrilleData(
+    root
+)
 {
     console.log(
         "================================"
     );
 
+
     console.log(
         "EXTRACTION DONNÉES GRILLE"
     );
 
-    if (!root || typeof root !== "object")
+
+    if (
+        !root ||
+        typeof root !== "object"
+    )
     {
         throw new Error(
             "Objet racine NSKeyedArchiver invalide."
@@ -1725,29 +1999,18 @@ function extractGrilleData(root)
         typeof root
     );
 
+
     console.log(
         "Clés root :",
-        Object.keys(root)
+        Object.keys(
+            root
+        )
     );
 
-
-    // --------------------------------------------------------
-    // IMPORTANT :
-    //
-    // decodeGrilleArchive() a déjà résolu le
-    // NSDictionary NSKeyedArchiver.
-    //
-    // root EST donc directement le dictionnaire
-    // contenant GRILLE, COULEUR, PALETTE, etc.
-    // --------------------------------------------------------
 
     const result =
         root;
 
-
-    // --------------------------------------------------------
-    // Vérification
-    // --------------------------------------------------------
 
     const expectedKeys =
     [
@@ -1807,24 +2070,29 @@ async function loadGrilleFile(
         "==============================="
     );
 
+
     console.log(
         "OUVERTURE GRILLE"
     );
+
 
     console.log(
         "Nom :",
         file.name
     );
 
+
     console.log(
         "Taille fichier :",
         file.size
     );
 
+
     console.log(
         "Type :",
         file.type
     );
+
 
     console.log(
         "==============================="
@@ -1909,7 +2177,7 @@ async function loadGrilleFile(
 
 
     // --------------------------------------------------------
-    // Données LZFSE
+    // LZFSE
     // --------------------------------------------------------
 
     const compressed =
@@ -2005,39 +2273,47 @@ async function loadGrilleFile(
         "================================"
     );
 
+
     console.log(
         "ARCHIVE GRILLE"
     );
+
 
     console.log(
         "GRILLE :",
         grilleData.GRILLE
     );
 
+
     console.log(
         "COULEUR :",
         grilleData.COULEUR
     );
+
 
     console.log(
         "PALETTE :",
         grilleData.PALETTE
     );
 
+
     console.log(
         "ENCOURS :",
         grilleData.ENCOURS
     );
+
 
     console.log(
         "TILESIZE :",
         grilleData.TILESIZE
     );
 
+
     console.log(
         "TILEORIGIN :",
         grilleData.TILEORIGIN
     );
+
 
     console.log(
         "================================"
@@ -2045,7 +2321,7 @@ async function loadGrilleFile(
 
 
     // --------------------------------------------------------
-    // Chargement des images
+    // Images
     // --------------------------------------------------------
 
     if (
@@ -2093,9 +2369,6 @@ async function loadGrilleFile(
         "number"
     )
     {
-        // Le fichier Mac stocke la taille historique.
-        // L'interface iPad travaille avec une taille doublée.
-
         tileSize =
             Math.max(
                 2,
@@ -2134,10 +2407,22 @@ async function loadGrilleFile(
 
 
     // --------------------------------------------------------
-    // Affichage
+    // Grille
     // --------------------------------------------------------
 
     recomputeGrid();
+
+
+    // --------------------------------------------------------
+    // Caméra
+    // --------------------------------------------------------
+
+    resetCamera();
+
+
+    // --------------------------------------------------------
+    // Affichage
+    // --------------------------------------------------------
 
     draw();
 
@@ -2171,117 +2456,67 @@ async function loadGrilleFile(
     console.log(
         "================================"
     );
-
-    console.log(
-    "AVANT DRAW"
-);
-
-draw();
-
-console.log(
-    "APRÈS DRAW"
-);
 }
 
 
 // ============================================================
-// NSData -> IMAGE
+// IMAGE NSData -> IMAGE HTML
 // ============================================================
-function imageFromBytes(bytes)
-{
-    return new Promise((resolve, reject) =>
-    {
-        console.log(
-            "imageFromBytes : début, taille =",
-            bytes ? bytes.length : null
-        );
 
-        if (!(bytes instanceof Uint8Array))
-        {
-            console.error(
-                "imageFromBytes : ce n'est pas un Uint8Array",
-                bytes
-            );
-
-            reject(
-                new Error("Données image invalides")
-            );
-
-            return;
-        }
-
-        const blob =
-            new Blob(
-                [bytes],
-                {
-                    type: "image/png"
-                }
-            );
-
-        console.log(
-            "imageFromBytes : Blob créé",
-            blob.size,
-            blob.type
-        );
-
-        const url =
-            URL.createObjectURL(blob);
-
-        console.log(
-            "imageFromBytes : URL",
-            url
-        );
-
-        const img =
-            new Image();
-
-        img.onload = () =>
-        {
-            console.log(
-                "imageFromBytes : IMAGE CHARGÉE",
-                img.width,
-                "x",
-                img.height
-            );
-
-            URL.revokeObjectURL(url);
-
-            resolve(img);
-        };
-
-        img.onerror = (event) =>
-        {
-            console.error(
-                "imageFromBytes : ERREUR CHARGEMENT IMAGE",
-                event
-            );
-
-            URL.revokeObjectURL(url);
-
-            reject(
-                new Error(
-                    "Impossible de décoder le PNG"
-                )
-            );
-        };
-
-        img.src = url;
-    });
-}
-function imageFromBytesOld(
+function imageFromBytes(
     bytes
 )
 {
     return new Promise(
-        function (resolve, reject)
+        (
+            resolve,
+            reject
+        ) =>
         {
+            console.log(
+                "imageFromBytes : début, taille =",
+                bytes
+                    ? bytes.length
+                    : null
+            );
+
+
+            if (
+                !(bytes instanceof Uint8Array)
+            )
+            {
+                console.error(
+                    "imageFromBytes : ce n'est pas un Uint8Array",
+                    bytes
+                );
+
+
+                reject(
+                    new Error(
+                        "Données image invalides"
+                    )
+                );
+
+
+                return;
+            }
+
+
             const blob =
                 new Blob(
                     [bytes],
                     {
-                        type: "image/png"
+                        type:
+                            "image/png"
                     }
                 );
+
+
+            console.log(
+                "imageFromBytes : Blob créé",
+                blob.size,
+                blob.type
+            );
 
 
             const url =
@@ -2290,39 +2525,61 @@ function imageFromBytesOld(
                 );
 
 
-            const image =
+            console.log(
+                "imageFromBytes : URL",
+                url
+            );
+
+
+            const img =
                 new Image();
 
 
-            image.onload =
-                function ()
+            img.onload =
+                () =>
                 {
+                    console.log(
+                        "imageFromBytes : IMAGE CHARGÉE",
+                        img.width,
+                        "x",
+                        img.height
+                    );
+
+
                     URL.revokeObjectURL(
                         url
                     );
 
+
                     resolve(
-                        image
+                        img
                     );
                 };
 
 
-            image.onerror =
-                function ()
+            img.onerror =
+                event =>
                 {
+                    console.error(
+                        "imageFromBytes : ERREUR CHARGEMENT IMAGE",
+                        event
+                    );
+
+
                     URL.revokeObjectURL(
                         url
                     );
 
+
                     reject(
                         new Error(
-                            "Impossible de décoder l'image PNG."
+                            "Impossible de décoder le PNG"
                         )
                     );
                 };
 
 
-            image.src =
+            img.src =
                 url;
         }
     );
@@ -2333,7 +2590,9 @@ function imageFromBytesOld(
 // NSINDEXSET
 // ============================================================
 
-function decodeNSIndexSet(value)
+function decodeNSIndexSet(
+    value
+)
 {
     const result =
         new Set();
@@ -2346,29 +2605,38 @@ function decodeNSIndexSet(value)
 
 
     // --------------------------------------------------------
-    // Cas simple : tableau d'indices
+    // Tableau simple
     // --------------------------------------------------------
 
-    if (Array.isArray(value))
+    if (
+        Array.isArray(
+            value
+        )
+    )
     {
         for (
             const index of value
         )
         {
             if (
-                Number.isInteger(index)
+                Number.isInteger(
+                    index
+                )
             )
             {
-                result.add(index);
+                result.add(
+                    index
+                );
             }
         }
+
 
         return result;
     }
 
 
     // --------------------------------------------------------
-    // Vérification NSIndexSet
+    // NSIndexSet
     // --------------------------------------------------------
 
     if (
@@ -2380,6 +2648,7 @@ function decodeNSIndexSet(value)
             "Objet NSIndexSet inattendu :",
             value
         );
+
 
         return result;
     }
@@ -2403,6 +2672,7 @@ function decodeNSIndexSet(value)
             "NSRangeData absent."
         );
 
+
         return result;
     }
 
@@ -2414,27 +2684,7 @@ function decodeNSIndexSet(value)
 
 
     // --------------------------------------------------------
-    // PackedUIntSequence
-    //
-    // Apple encode les UInt en base 128.
-    //
-    // Si l'octet est < 128 :
-    //      fin de l'entier
-    //
-    // Si l'octet est >= 128 :
-    //      (octet - 128) est le chiffre courant
-    //      l'octet suivant contient la suite
-    //
-    // Exemple :
-    //
-    // 48 02
-    //
-    // donne :
-    //
-    // 0x48 + 128 * 0x02
-    // = 72 + 256
-    // = 328
-    //
+    // Packed UInt
     // --------------------------------------------------------
 
     function decodePackedUInt(
@@ -2443,7 +2693,9 @@ function decodeNSIndexSet(value)
     )
     {
         let first =
-            bytes[offset++];
+            bytes[
+                offset++
+            ];
 
 
         if (
@@ -2451,8 +2703,11 @@ function decodeNSIndexSet(value)
         )
         {
             return {
-                value: first,
-                nextOffset: offset
+                value:
+                    first,
+
+                nextOffset:
+                    offset
             };
         }
 
@@ -2471,7 +2726,9 @@ function decodeNSIndexSet(value)
         )
         {
             const byte =
-                bytes[offset++];
+                bytes[
+                    offset++
+                ];
 
 
             if (
@@ -2482,16 +2739,22 @@ function decodeNSIndexSet(value)
                     multiplier *
                     byte;
 
+
                 return {
-                    value: value,
-                    nextOffset: offset
+                    value:
+                        value,
+
+                    nextOffset:
+                        offset
                 };
             }
 
 
             value +=
                 multiplier *
-                (byte - 128);
+                (
+                    byte - 128
+                );
 
 
             multiplier *=
@@ -2506,7 +2769,7 @@ function decodeNSIndexSet(value)
 
 
     // --------------------------------------------------------
-    // Décodage de tous les UInt
+    // Tous les UInt
     // --------------------------------------------------------
 
     const integers =
@@ -2547,12 +2810,10 @@ function decodeNSIndexSet(value)
 
 
     // --------------------------------------------------------
-    // Chaque plage = 2 entiers :
+    // Deux UInt par plage :
     //
     // location
     // length
-    //
-    // NSRangeCount = nombre de plages
     // --------------------------------------------------------
 
     const expectedIntegerCount =
@@ -2572,10 +2833,6 @@ function decodeNSIndexSet(value)
         );
     }
 
-
-    // --------------------------------------------------------
-    // Conversion des plages en indices individuels
-    // --------------------------------------------------------
 
     let decodedCount =
         0;
@@ -2639,6 +2896,7 @@ function decodeNSIndexSet(value)
         result.size
     );
 
+
     return result;
 }
 
@@ -2678,17 +2936,24 @@ async function loadImageFile(
             sourceImage =
                 image;
 
+
             colorImage =
                 null;
 
+
             paletteImage =
                 null;
+
 
             selectedTiles =
                 new Set();
 
 
             recomputeGrid();
+
+
+            resetCamera();
+
 
             draw();
 
@@ -2751,8 +3016,10 @@ function recomputeGrid()
         cols = 0;
         rows = 0;
 
+
         canvas.width = 1;
         canvas.height = 1;
+
 
         return;
     }
@@ -2773,11 +3040,13 @@ function recomputeGrid()
 
 
     canvas.width =
-        cols * tileSize;
+        cols *
+        tileSize;
 
 
     canvas.height =
-        rows * tileSize;
+        rows *
+        tileSize;
 
 
     console.log(
@@ -2787,82 +3056,47 @@ function recomputeGrid()
         rows,
         "cases"
     );
+
+
+    console.log(
+        "Canvas :",
+        canvas.width,
+        "x",
+        canvas.height
+    );
 }
 
 
 // ============================================================
 // DESSIN
 // ============================================================
-function drawtrace()
-{
-    console.log("========== DRAW TEST ==========");
 
-    const canvas = document.getElementById("canvas");
-    const ctx = canvas.getContext("2d");
-
-    console.log("canvas :", canvas);
-    console.log("dimensions :", canvas.width, canvas.height);
-
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    ctx.fillStyle = "red";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    console.log(
-        "PIXEL :",
-        ctx.getImageData(10, 10, 1, 1).data
-    );
-}
 function draw()
 {
-    console.log("========== DRAW ==========");
-
-    console.log("canvas :", canvas);
-
     console.log(
-        "canvas.width / height :",
-        canvas.width,
-        canvas.height
+        "========== DRAW =========="
     );
 
-    console.log(
-        "canvas.clientWidth / clientHeight :",
-        canvas.clientWidth,
-        canvas.clientHeight
-    );
-
-    console.log("sourceImage :", sourceImage);
-
-    if (sourceImage)
-    {
-        console.log(
-            "sourceImage.width / height :",
-            sourceImage.width,
-            sourceImage.height
-        );
-    }
-
-    console.log("tileSize :", tileSize);
-
-    console.log(
-        "selectedTiles :",
-        selectedTiles ? selectedTiles.size : null
-    );
-
-    const ctx = canvas.getContext("2d");
 
     if (!ctx)
     {
-        console.error("Impossible d'obtenir le contexte 2D.");
         return;
     }
 
+
     // --------------------------------------------------------
-    // Réinitialisation du contexte
+    // Réinitialisation
     // --------------------------------------------------------
 
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.setTransform(
+        1,
+        0,
+        0,
+        1,
+        0,
+        0
+    );
+
 
     ctx.clearRect(
         0,
@@ -2871,34 +3105,44 @@ function draw()
         canvas.height
     );
 
+
+    if (!sourceImage)
+    {
+        return;
+    }
+
+
+    // --------------------------------------------------------
+    // Caméra
+    // --------------------------------------------------------
+
+    ctx.save();
+
+
+    ctx.translate(
+        panX,
+        panY
+    );
+
+
+    ctx.scale(
+        zoomFactor,
+        zoomFactor
+    );
+
+
     // --------------------------------------------------------
     // Image
     // --------------------------------------------------------
 
-    if (sourceImage)
-    {
-        ctx.drawImage(
-            sourceImage,
-            0,
-            0,
-            canvas.width,
-            canvas.height
-        );
-    }
-    else
-    {
-        // Test visuel si aucune image n'est disponible
-        ctx.fillStyle = "#ff0000";
+    ctx.drawImage(
+        sourceImage,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
 
-        ctx.fillRect(
-            0,
-            0,
-            canvas.width,
-            canvas.height
-        );
-
-        return;
-    }
 
     // --------------------------------------------------------
     // Cases sélectionnées
@@ -2908,10 +3152,14 @@ function draw()
     {
         ctx.save();
 
+
         ctx.fillStyle =
             "rgba(255, 0, 0, 0.35)";
 
-        for (const index of selectedTiles)
+
+        for (
+            const index of selectedTiles
+        )
         {
             if (
                 index < 0 ||
@@ -2921,17 +3169,28 @@ function draw()
                 continue;
             }
 
+
             const col =
-                index % cols;
+                index %
+                cols;
+
 
             const row =
-                Math.floor(index / cols);
+                Math.floor(
+                    index /
+                    cols
+                );
+
 
             const x =
-                col * tileSize;
+                col *
+                tileSize;
+
 
             const y =
-                row * tileSize;
+                row *
+                tileSize;
+
 
             ctx.fillRect(
                 x,
@@ -2941,8 +3200,10 @@ function draw()
             );
         }
 
+
         ctx.restore();
     }
+
 
     // --------------------------------------------------------
     // Grille
@@ -2950,12 +3211,18 @@ function draw()
 
     ctx.save();
 
+
     ctx.strokeStyle =
         "rgba(0, 0, 0, 0.35)";
 
-    ctx.lineWidth = 1;
+
+    ctx.lineWidth =
+        1 /
+        zoomFactor;
+
 
     ctx.beginPath();
+
 
     for (
         let col = 0;
@@ -2964,18 +3231,23 @@ function draw()
     )
     {
         const x =
-            col * tileSize + 0.5;
+            col *
+            tileSize +
+            0.5;
+
 
         ctx.moveTo(
             x,
             0
         );
 
+
         ctx.lineTo(
             x,
             canvas.height
         );
     }
+
 
     for (
         let row = 0;
@@ -2984,12 +3256,16 @@ function draw()
     )
     {
         const y =
-            row * tileSize + 0.5;
+            row *
+            tileSize +
+            0.5;
+
 
         ctx.moveTo(
             0,
             y
         );
+
 
         ctx.lineTo(
             canvas.width,
@@ -2997,11 +3273,31 @@ function draw()
         );
     }
 
+
     ctx.stroke();
+
 
     ctx.restore();
 
-    console.log("DRAW terminé");
+
+    ctx.restore();
+
+
+    console.log(
+        "zoom =",
+        zoomFactor,
+
+        "pan =",
+        panX,
+
+        "panY =",
+        panY
+    );
+
+
+    console.log(
+        "DRAW terminé"
+    );
 }
 
 
@@ -3016,13 +3312,15 @@ function tileIndexForPoint(
 {
     const col =
         Math.floor(
-            x / tileSize
+            x /
+            tileSize
         );
 
 
     const row =
         Math.floor(
-            y / tileSize
+            y /
+            tileSize
         );
 
 
@@ -3038,7 +3336,8 @@ function tileIndexForPoint(
 
 
     return (
-        row * cols +
+        row *
+        cols +
         col
     );
 }
@@ -3056,7 +3355,9 @@ function toggleTileAt(
         );
 
 
-    if (index < 0)
+    if (
+        index < 0
+    )
     {
         return;
     }
@@ -3118,29 +3419,46 @@ function canvasPointFromTouch(
         canvas.getBoundingClientRect();
 
 
-    const scaleX =
-        canvas.width /
-        rect.width;
+    // --------------------------------------------------------
+    // Coordonnées écran
+    // --------------------------------------------------------
+
+    const screenX =
+        touch.clientX -
+        rect.left;
 
 
-    const scaleY =
-        canvas.height /
-        rect.height;
+    const screenY =
+        touch.clientY -
+        rect.top;
 
+
+    // --------------------------------------------------------
+    // Retour dans les coordonnées originales
+    // du canvas.
+    // --------------------------------------------------------
 
     return {
         x:
-            (touch.clientX -
-             rect.left) *
-            scaleX,
+            (
+                screenX -
+                panX
+            ) /
+            zoomFactor,
 
         y:
-            (touch.clientY -
-             rect.top) *
-            scaleY
+            (
+                screenY -
+                panY
+            ) /
+            zoomFactor
     };
 }
 
+
+// ============================================================
+// TOUCH START
+// ============================================================
 
 function handleTouchStart(
     event
@@ -3149,22 +3467,66 @@ function handleTouchStart(
     event.preventDefault();
 
 
+    // --------------------------------------------------------
+    // Deux doigts = zoom
+    // --------------------------------------------------------
+
     if (
         event.touches.length === 2
     )
     {
+        const t1 =
+            event.touches[0];
+
+
+        const t2 =
+            event.touches[1];
+
+
         lastTouchDistance =
             distanceBetweenTouches(
-                event.touches[0],
-                event.touches[1]
+                t1,
+                t2
             );
+
+
+        const rect =
+            canvas.getBoundingClientRect();
+
+
+        lastPinchCenterX =
+            (
+                (
+                    t1.clientX +
+                    t2.clientX
+                ) *
+                0.5
+            ) -
+            rect.left;
+
+
+        lastPinchCenterY =
+            (
+                (
+                    t1.clientY +
+                    t2.clientY
+                ) *
+                0.5
+            ) -
+            rect.top;
+
 
         isDragging =
             false;
 
+
         return;
     }
 
+
+    // --------------------------------------------------------
+    // Un doigt = sélection
+    // --------------------------------------------------------
 
     if (
         event.touches.length === 1
@@ -3183,6 +3545,7 @@ function handleTouchStart(
         touchStartX =
             point.x;
 
+
         touchStartY =
             point.y;
 
@@ -3199,6 +3562,10 @@ function handleTouchStart(
 }
 
 
+// ============================================================
+// TOUCH MOVE
+// ============================================================
+
 function handleTouchMove(
     event
 )
@@ -3206,54 +3573,148 @@ function handleTouchMove(
     event.preventDefault();
 
 
+    // --------------------------------------------------------
+    // Deux doigts = zoom
+    // --------------------------------------------------------
+
     if (
         event.touches.length === 2
     )
     {
+        const t1 =
+            event.touches[0];
+
+
+        const t2 =
+            event.touches[1];
+
+
         const distance =
             distanceBetweenTouches(
-                event.touches[0],
-                event.touches[1]
+                t1,
+                t2
             );
 
 
         if (
-            lastTouchDistance > 0
+            lastTouchDistance > 0 &&
+            distance > 0
         )
         {
+            // ------------------------------------------------
+            // Centre du pincement
+            // ------------------------------------------------
+
+            const rect =
+                canvas.getBoundingClientRect();
+
+
+            const centerX =
+                (
+                    (
+                        t1.clientX +
+                        t2.clientX
+                    ) *
+                    0.5
+                ) -
+                rect.left;
+
+
+            const centerY =
+                (
+                    (
+                        t1.clientY +
+                        t2.clientY
+                    ) *
+                    0.5
+                ) -
+                rect.top;
+
+
+            // ------------------------------------------------
+            // Position de l'image sous le centre
+            // avant changement de zoom.
+            // ------------------------------------------------
+
+            const imageX =
+                (
+                    centerX -
+                    panX
+                ) /
+                zoomFactor;
+
+
+            const imageY =
+                (
+                    centerY -
+                    panY
+                ) /
+                zoomFactor;
+
+
+            // ------------------------------------------------
+            // Nouveau zoom
+            // ------------------------------------------------
+
             const ratio =
                 distance /
                 lastTouchDistance;
 
 
-            zoomFactor *=
-                ratio;
-
-
-            zoomFactor =
+            const newZoom =
                 Math.max(
                     0.25,
                     Math.min(
                         5.0,
-                        zoomFactor
+                        zoomFactor *
+                        ratio
                     )
                 );
 
 
-            canvas.style.transform =
-                "scale(" +
-                zoomFactor +
-                ")";
+            zoomFactor =
+                newZoom;
+
+
+            // ------------------------------------------------
+            // Conserve le point sous les doigts
+            // ------------------------------------------------
+
+            panX =
+                centerX -
+                imageX *
+                zoomFactor;
+
+
+            panY =
+                centerY -
+                imageY *
+                zoomFactor;
 
 
             lastTouchDistance =
                 distance;
+
+
+            lastPinchCenterX =
+                centerX;
+
+
+            lastPinchCenterY =
+                centerY;
+
+
+            draw();
         }
 
 
         return;
     }
 
+
+    // --------------------------------------------------------
+    // Un doigt = sélection continue
+    // --------------------------------------------------------
 
     if (
         event.touches.length === 1 &&
@@ -3288,11 +3749,16 @@ function handleTouchMove(
                 index
             );
 
+
             draw();
         }
     }
 }
 
+
+// ============================================================
+// TOUCH END
+// ============================================================
 
 function handleTouchEnd(
     event
@@ -3327,6 +3793,7 @@ function handleTouchEnd(
 function clearSelection()
 {
     selectedTiles.clear();
+
 
     draw();
 
