@@ -2211,16 +2211,11 @@ function decodeGrilleArchive(archive)
         );
     }
 
-
     const resolver =
-        new KeyedArchiveResolver(
-            archive
-        );
-
+        new KeyedArchiveResolver(archive);
 
     const rootUID =
         archive.$top?.root?.uid;
-
 
     if (rootUID === undefined)
     {
@@ -2229,10 +2224,9 @@ function decodeGrilleArchive(archive)
         );
     }
 
-
-    return resolver.resolveObject(
-        rootUID
-    );
+    // rootUID est déjà le numéro de l'objet.
+    // Il faut donc appeler resolveUID(), pas resolveObject().
+    return resolver.resolveUID(rootUID);
 }
 
 
