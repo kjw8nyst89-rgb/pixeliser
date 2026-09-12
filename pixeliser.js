@@ -357,60 +357,7 @@ document.addEventListener(
             }
         );
 
-        // ============================================================
-// TRACKPAD MAC : déplacement à 2 doigts + pincement
-// ============================================================
-
-workspace.addEventListener("wheel", handleWheel, {
-    passive: false
-});
-
-function handleWheel(event)
-{
-    event.preventDefault();
-
-    const rect = canvas.getBoundingClientRect();
-
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-
-    // --------------------------------------------------------
-    // PINCEMENT avec le trackpad Mac
-    // Safari transmet généralement ctrlKey = true
-    // --------------------------------------------------------
-    if (event.ctrlKey)
-    {
-        // Point du dessin situé sous le curseur avant le zoom
-        const worldX = (x - panX) / zoomFactor;
-        const worldY = (y - panY) / zoomFactor;
-
-        // Sensibilité du zoom
-        const factor = Math.exp(-event.deltaY * 0.01);
-
-        const newZoom = Math.max(
-            0.2,
-            Math.min(8.0, zoomFactor * factor)
-        );
-
-        // On conserve le même point sous les doigts
-        panX = x - worldX * newZoom;
-        panY = y - worldY * newZoom;
-
-        zoomFactor = newZoom;
-
-        draw();
-        return;
-    }
-
-    // --------------------------------------------------------
-    // DEUX DOIGTS : déplacement du dessin
-    // --------------------------------------------------------
-
-    panX -= event.deltaX;
-    panY -= event.deltaY;
-
-    draw();
-}
+      
 
         // ----------------------------------------------------
         // Resize
