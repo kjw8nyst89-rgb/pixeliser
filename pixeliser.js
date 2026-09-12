@@ -2794,7 +2794,58 @@ function recomputeGrid()
 // ============================================================
 
 function draw()
+    
 {
+    console.log("========== DRAW ==========");
+
+console.log(
+    "canvas :",
+    canvas
+);
+
+console.log(
+    "canvas.width / height :",
+    canvas.width,
+    canvas.height
+);
+
+console.log(
+    "canvas.clientWidth / clientHeight :",
+    canvas.clientWidth,
+    canvas.clientHeight
+);
+
+console.log(
+    "sourceImage :",
+    sourceImage
+);
+
+if (sourceImage)
+{
+    console.log(
+        "sourceImage.width / height :",
+        sourceImage.width,
+        sourceImage.height
+    );
+}
+
+console.log(
+    "tileSize :",
+    tileSize
+);
+
+console.log(
+    "selectedTiles :",
+    selectedTiles ? selectedTiles.size : null
+);
+
+const ctx =
+    canvas.getContext("2d");
+
+console.log(
+    "context 2D :",
+    ctx
+);
     if (!ctx)
     {
         return;
