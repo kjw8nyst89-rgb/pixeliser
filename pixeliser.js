@@ -68,6 +68,9 @@ document.addEventListener(
         console.log(
             "Pixeliser démarrage..."
         );
+ console.log(
+        "Version 10"
+    );
 
 
         canvas =
