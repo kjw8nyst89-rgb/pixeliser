@@ -122,30 +122,22 @@ button:active {
    Zone de travail
    -------------------------------------------------- */
 
+
 #workspace {
-
     position: relative;
-
     flex: 1;
-
     overflow: hidden;
-
     background: #303030;
-
     touch-action: none;
-
 }
 
-
 #canvas {
-
     position: absolute;
-
     left: 0;
     top: 0;
-
     display: block;
-
     touch-action: none;
-
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
 }
