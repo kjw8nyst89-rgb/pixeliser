@@ -13,7 +13,6 @@ let paletteImage = null;
 
 let canvas = null;
 let ctx = null;
-let workspace = null;
 
 let cols = 0;
 let rows = 0;
@@ -23,17 +22,9 @@ let tileSize = 20;
 let selectedTiles = new Set();
 
 
-// ------------------------------------------------------------
-// Dimensions du monde
-// ------------------------------------------------------------
-
-let worldWidth = 0;
-let worldHeight = 0;
-
-
-// ------------------------------------------------------------
-// Caméra
-// ------------------------------------------------------------
+// ============================================================
+// CAMERA
+// ============================================================
 
 let zoomFactor = 1.0;
 
@@ -41,22 +32,29 @@ let panX = 0;
 let panY = 0;
 
 
-// ------------------------------------------------------------
-// Pointeurs actifs
-// ------------------------------------------------------------
+// ============================================================
+// POINTER / TOUCH
+// ============================================================
 
-const activePointers = new Map();
+let activePointers = new Map();
 
 let singlePointer = null;
-
 let singlePointerMoved = false;
-
-let lastPinchDistance = 0;
-let lastPinchCenterX = 0;
-let lastPinchCenterY = 0;
 
 let lastPointerWorldX = 0;
 let lastPointerWorldY = 0;
+
+
+// ============================================================
+// PINCH
+// ============================================================
+
+let lastPinchDistance = 0;
+
+let lastPinchCenterX = 0;
+let lastPinchCenterY = 0;
+
+let touchInteractionActive = false;
 
 
 // ============================================================
@@ -67,13 +65,15 @@ document.addEventListener(
     "DOMContentLoaded",
     async function ()
     {
-        console.log("Pixeliser démarrage...");
+        console.log(
+            "Pixeliser démarrage..."
+        );
+
 
         canvas =
-            document.getElementById("canvas");
-
-        workspace =
-            document.getElementById("workspace");
+            document.getElementById(
+                "canvas"
+            );
 
 
         if (!canvas)
@@ -86,18 +86,10 @@ document.addEventListener(
         }
 
 
-        if (!workspace)
-        {
-            console.error(
-                "Workspace introuvable."
-            );
-
-            return;
-        }
-
-
         ctx =
-            canvas.getContext("2d");
+            canvas.getContext(
+                "2d"
+            );
 
 
         if (!ctx)
@@ -111,47 +103,6 @@ document.addEventListener(
 
 
         // ----------------------------------------------------
-        // Canvas viewport
-        // ----------------------------------------------------
-
-        canvas.style.position = "absolute";
-        canvas.style.left = "0";
-        canvas.style.top = "0";
-        canvas.style.width = "100%";
-        canvas.style.height = "100%";
-        canvas.style.display = "block";
-        canvas.style.touchAction = "none";
-
-
-        resizeCanvas();
-
-
-        window.addEventListener(
-            "resize",
-            function ()
-            {
-                resizeCanvas();
-            }
-        );
-
-
-        if (window.ResizeObserver)
-        {
-            const resizeObserver =
-                new ResizeObserver(
-                    function ()
-                    {
-                        resizeCanvas();
-                    }
-                );
-
-            resizeObserver.observe(
-                workspace
-            );
-        }
-
-
-        // ----------------------------------------------------
         // Boutons
         // ----------------------------------------------------
 
@@ -160,25 +111,30 @@ document.addEventListener(
                 "openButton"
             );
 
+
         const openGrilleButton =
             document.getElementById(
                 "openGrilleButton"
             );
+
 
         const clearButton =
             document.getElementById(
                 "clearButton"
             );
 
+
         const imageInput =
             document.getElementById(
                 "imageInput"
             );
 
+
         const grilleInput =
             document.getElementById(
                 "grilleInput"
             );
+
 
         const tileSizeInput =
             document.getElementById(
@@ -186,7 +142,7 @@ document.addEventListener(
             );
 
 
-        if (openButton && imageInput)
+        if (openButton)
         {
             openButton.addEventListener(
                 "click",
@@ -207,16 +163,19 @@ document.addEventListener(
                     const file =
                         event.target.files[0];
 
+
                     if (file)
                     {
-                        loadImageFile(file);
+                        loadImageFile(
+                            file
+                        );
                     }
                 }
             );
         }
 
 
-        if (openGrilleButton && grilleInput)
+        if (openGrilleButton)
         {
             openGrilleButton.addEventListener(
                 "click",
@@ -237,10 +196,12 @@ document.addEventListener(
                     const file =
                         event.target.files[0];
 
+
                     if (!file)
                     {
                         return;
                     }
+
 
                     try
                     {
@@ -254,6 +215,7 @@ document.addEventListener(
                             "Erreur lecture grille :",
                             error
                         );
+
 
                         alert(
                             "Erreur lecture grille :\n" +
@@ -286,6 +248,7 @@ document.addEventListener(
                             10
                         );
 
+
                     if (
                         !Number.isFinite(value) ||
                         value < 2
@@ -294,11 +257,13 @@ document.addEventListener(
                         return;
                     }
 
-                    tileSize = value;
+
+                    tileSize =
+                        value;
+
 
                     recomputeGrid();
 
-                    resetCamera();
 
                     draw();
                 }
@@ -309,11 +274,7 @@ document.addEventListener(
         // ----------------------------------------------------
         // Pointer Events
         //
-        // Fonctionne avec :
-        //   souris Mac
-        //   trackpad
-        //   doigt iPad
-        //   Apple Pencil
+        // Souris Mac / trackpad.
         // ----------------------------------------------------
 
         canvas.addEventListener(
@@ -324,6 +285,7 @@ document.addEventListener(
             }
         );
 
+
         canvas.addEventListener(
             "pointermove",
             handlePointerMove,
@@ -331,6 +293,7 @@ document.addEventListener(
                 passive: false
             }
         );
+
 
         canvas.addEventListener(
             "pointerup",
@@ -340,11 +303,67 @@ document.addEventListener(
             }
         );
 
+
         canvas.addEventListener(
             "pointercancel",
             handlePointerUp,
             {
                 passive: false
+            }
+        );
+
+
+        // ----------------------------------------------------
+        // Touch Events
+        //
+        // Utilisés pour le tactile iPad / iPad Simulator.
+        // ----------------------------------------------------
+
+        canvas.addEventListener(
+            "touchstart",
+            handleTouchStart,
+            {
+                passive: false
+            }
+        );
+
+
+        canvas.addEventListener(
+            "touchmove",
+            handleTouchMove,
+            {
+                passive: false
+            }
+        );
+
+
+        canvas.addEventListener(
+            "touchend",
+            handleTouchEnd,
+            {
+                passive: false
+            }
+        );
+
+
+        canvas.addEventListener(
+            "touchcancel",
+            handleTouchEnd,
+            {
+                passive: false
+            }
+        );
+
+
+        // ----------------------------------------------------
+        // Resize
+        // ----------------------------------------------------
+
+        window.addEventListener(
+            "resize",
+            function ()
+            {
+                draw();
             }
         );
 
@@ -366,176 +385,6 @@ document.addEventListener(
         }
     }
 );
-
-
-// ============================================================
-// RESIZE CANVAS
-// ============================================================
-
-function resizeCanvas()
-{
-    if (!canvas || !workspace)
-    {
-        return;
-    }
-
-
-    const rect =
-        workspace.getBoundingClientRect();
-
-
-    const width =
-        Math.max(
-            1,
-            Math.round(rect.width)
-        );
-
-    const height =
-        Math.max(
-            1,
-            Math.round(rect.height)
-        );
-
-
-    const dpr =
-        Math.max(
-            1,
-            window.devicePixelRatio || 1
-        );
-
-
-    const pixelWidth =
-        Math.round(
-            width * dpr
-        );
-
-    const pixelHeight =
-        Math.round(
-            height * dpr
-        );
-
-
-    if (
-        canvas.width !== pixelWidth ||
-        canvas.height !== pixelHeight
-    )
-    {
-        canvas.width =
-            pixelWidth;
-
-        canvas.height =
-            pixelHeight;
-    }
-
-
-    canvas.style.width =
-        width + "px";
-
-    canvas.style.height =
-        height + "px";
-
-
-    draw();
-}
-
-
-// ============================================================
-// DIMENSIONS VIEWPORT
-// ============================================================
-
-function viewportWidth()
-{
-    if (!canvas)
-    {
-        return 1;
-    }
-
-    return canvas.clientWidth || 1;
-}
-
-
-function viewportHeight()
-{
-    if (!canvas)
-    {
-        return 1;
-    }
-
-    return canvas.clientHeight || 1;
-}
-
-
-// ============================================================
-// CAMERA
-// ============================================================
-
-function resetCamera()
-{
-    if (
-        worldWidth <= 0 ||
-        worldHeight <= 0
-    )
-    {
-        zoomFactor = 1;
-        panX = 0;
-        panY = 0;
-
-        return;
-    }
-
-
-    const vw =
-        viewportWidth();
-
-    const vh =
-        viewportHeight();
-
-
-    const scaleX =
-        vw / worldWidth;
-
-    const scaleY =
-        vh / worldHeight;
-
-
-    zoomFactor =
-        Math.min(
-            scaleX,
-            scaleY
-        );
-
-
-    // Évite une valeur aberrante
-    zoomFactor =
-        Math.max(
-            0.05,
-            Math.min(
-                10,
-                zoomFactor
-            )
-        );
-
-
-    panX =
-        (vw -
-         worldWidth * zoomFactor) /
-        2;
-
-    panY =
-        (vh -
-         worldHeight * zoomFactor) /
-        2;
-
-
-    console.log(
-        "Camera reset :",
-        {
-            zoom: zoomFactor,
-            panX: panX,
-            panY: panY
-        }
-    );
-}
 
 
 // ============================================================
@@ -601,6 +450,7 @@ async function initializeLZFSE()
             error
         );
 
+
         throw error;
     }
 }
@@ -623,10 +473,12 @@ async function decompressLZFSE(
         "Décompression LZFSE via MEMFS..."
     );
 
+
     console.log(
         "Compressed :",
         compressed.length
     );
+
 
     console.log(
         "Expected :",
@@ -636,6 +488,7 @@ async function decompressLZFSE(
 
     const inputPath =
         "/grille_input.lzfse";
+
 
     const outputPath =
         "/grille_output.bin";
@@ -661,6 +514,11 @@ async function decompressLZFSE(
     catch (e)
     {
     }
+
+
+    console.log(
+        "Copie des données LZFSE dans MEMFS..."
+    );
 
 
     lzfseModule.FS.writeFile(
@@ -750,6 +608,7 @@ class BinaryPlistDecoder
     constructor(bytes)
     {
         this.bytes = bytes;
+
         this.objects = [];
         this.offsets = [];
 
@@ -761,9 +620,13 @@ class BinaryPlistDecoder
     }
 
 
-    readUIntBE(offset, size)
+    readUIntBE(
+        offset,
+        size
+    )
     {
         let value = 0;
+
 
         for (
             let i = 0;
@@ -773,20 +636,29 @@ class BinaryPlistDecoder
         {
             value =
                 value * 256 +
-                this.bytes[offset + i];
+                this.bytes[
+                    offset + i
+                ];
         }
+
 
         return value;
     }
 
 
-    readDoubleBE(offset)
+    readDoubleBE(
+        offset
+    )
     {
         const buffer =
             this.bytes.buffer.slice(
-                this.bytes.byteOffset + offset,
-                this.bytes.byteOffset + offset + 8
+                this.bytes.byteOffset +
+                offset,
+                this.bytes.byteOffset +
+                offset +
+                8
             );
+
 
         return new DataView(
             buffer
@@ -799,7 +671,9 @@ class BinaryPlistDecoder
 
     decode()
     {
-        if (this.bytes.length < 40)
+        if (
+            this.bytes.length < 40
+        )
         {
             throw new Error(
                 "Binary plist trop court."
@@ -833,10 +707,16 @@ class BinaryPlistDecoder
 
 
         this.offsetIntSize =
-            this.bytes[trailer + 6];
+            this.bytes[
+                trailer + 6
+            ];
+
 
         this.objectRefSize =
-            this.bytes[trailer + 7];
+            this.bytes[
+                trailer + 7
+            ];
+
 
         this.numObjects =
             this.readUIntBE(
@@ -844,11 +724,13 @@ class BinaryPlistDecoder
                 8
             );
 
+
         this.topObject =
             this.readUIntBE(
                 trailer + 16,
                 8
             );
+
 
         this.offsetTableOffset =
             this.readUIntBE(
@@ -878,6 +760,10 @@ class BinaryPlistDecoder
         );
 
 
+        // ----------------------------------------------------
+        // Offsets
+        // ----------------------------------------------------
+
         this.offsets =
             new Array(
                 this.numObjects
@@ -893,11 +779,17 @@ class BinaryPlistDecoder
             this.offsets[i] =
                 this.readUIntBE(
                     this.offsetTableOffset +
-                    i * this.offsetIntSize,
+                    i *
+                    this.offsetIntSize,
+
                     this.offsetIntSize
                 );
         }
 
+
+        // ----------------------------------------------------
+        // Objets
+        // ----------------------------------------------------
 
         this.objects =
             new Array(
@@ -936,11 +828,14 @@ class BinaryPlistDecoder
         const offset =
             this.offsets[ref];
 
+
         const marker =
             this.bytes[offset];
 
+
         const type =
             marker >> 4;
+
 
         const info =
             marker & 0x0F;
@@ -952,83 +847,116 @@ class BinaryPlistDecoder
         switch (type)
         {
             case 0x0:
+
                 value =
-                    this.decodeSimple(info);
+                    this.decodeSimple(
+                        info
+                    );
+
                 break;
 
+
             case 0x1:
+
                 value =
                     this.decodeInteger(
                         info,
                         offset
                     );
+
                 break;
 
+
             case 0x2:
+
                 value =
                     this.decodeReal(
                         info,
                         offset
                     );
+
                 break;
 
+
             case 0x3:
+
                 value =
                     this.decodeDate(
                         info,
                         offset
                     );
+
                 break;
 
+
             case 0x4:
+
                 value =
                     this.decodeData(
                         info,
                         offset
                     );
+
                 break;
 
+
             case 0x5:
+
                 value =
                     this.decodeASCII(
                         info,
                         offset
                     );
+
                 break;
 
+
             case 0x6:
+
                 value =
                     this.decodeUTF16(
                         info,
                         offset
                     );
+
                 break;
 
+
             case 0x8:
+
                 value =
                     this.decodeUID(
                         info,
                         offset
                     );
+
                 break;
 
+
             case 0xA:
+
                 value =
                     this.decodeArray(
                         info,
                         offset
                     );
+
                 break;
 
+
             case 0xD:
+
                 value =
                     this.decodeDictionary(
                         info,
                         offset
                     );
+
                 break;
 
+
             default:
+
                 throw new Error(
                     "Type plist inconnu : 0x" +
                     type.toString(16)
@@ -1044,9 +972,14 @@ class BinaryPlistDecoder
     }
 
 
-    decodeLength(info, offset)
+    decodeLength(
+        info,
+        offset
+    )
     {
-        if (info < 0x0F)
+        if (
+            info < 0x0F
+        )
         {
             return {
                 length: info,
@@ -1056,10 +989,14 @@ class BinaryPlistDecoder
 
 
         const marker =
-            this.bytes[offset + 1];
+            this.bytes[
+                offset + 1
+            ];
+
 
         const type =
             marker >> 4;
+
 
         const integerInfo =
             marker & 0x0F;
@@ -1086,6 +1023,7 @@ class BinaryPlistDecoder
 
         return {
             length: length,
+
             offset:
                 offset +
                 2 +
@@ -1108,6 +1046,7 @@ class BinaryPlistDecoder
                 return true;
 
             default:
+
                 return {
                     plistSimple: info
                 };
@@ -1115,10 +1054,14 @@ class BinaryPlistDecoder
     }
 
 
-    decodeInteger(info, offset)
+    decodeInteger(
+        info,
+        offset
+    )
     {
         const byteCount =
             1 << info;
+
 
         return this.readUIntBE(
             offset + 1,
@@ -1127,7 +1070,10 @@ class BinaryPlistDecoder
     }
 
 
-    decodeReal(info, offset)
+    decodeReal(
+        info,
+        offset
+    )
     {
         const byteCount =
             1 << info;
@@ -1143,6 +1089,7 @@ class BinaryPlistDecoder
                     this.bytes.byteOffset +
                     offset + 5
                 );
+
 
             return new DataView(
                 buffer
@@ -1167,7 +1114,10 @@ class BinaryPlistDecoder
     }
 
 
-    decodeDate(info, offset)
+    decodeDate(
+        info,
+        offset
+    )
     {
         if (info !== 0x3)
         {
@@ -1176,13 +1126,17 @@ class BinaryPlistDecoder
             );
         }
 
+
         return this.readDoubleBE(
             offset + 1
         );
     }
 
 
-    decodeData(info, offset)
+    decodeData(
+        info,
+        offset
+    )
     {
         const result =
             this.decodeLength(
@@ -1190,14 +1144,19 @@ class BinaryPlistDecoder
                 offset
             );
 
+
         return this.bytes.slice(
             result.offset,
-            result.offset + result.length
+            result.offset +
+            result.length
         );
     }
 
 
-    decodeASCII(info, offset)
+    decodeASCII(
+        info,
+        offset
+    )
     {
         const result =
             this.decodeLength(
@@ -1205,7 +1164,9 @@ class BinaryPlistDecoder
                 offset
             );
 
+
         let text = "";
+
 
         for (
             let i = 0;
@@ -1220,11 +1181,15 @@ class BinaryPlistDecoder
             );
         }
 
+
         return text;
     }
 
 
-    decodeUTF16(info, offset)
+    decodeUTF16(
+        info,
+        offset
+    )
     {
         const result =
             this.decodeLength(
@@ -1232,7 +1197,9 @@ class BinaryPlistDecoder
                 offset
             );
 
+
         let text = "";
+
 
         for (
             let i = 0;
@@ -1244,25 +1211,33 @@ class BinaryPlistDecoder
                 result.offset +
                 i * 2;
 
+
             const code =
                 (this.bytes[p] << 8) |
                 this.bytes[p + 1];
+
 
             text += String.fromCharCode(
                 code
             );
         }
 
+
         return text;
     }
 
 
-    decodeUID(info, offset)
+    decodeUID(
+        info,
+        offset
+    )
     {
         const length =
             info + 1;
 
+
         let value = 0;
+
 
         for (
             let i = 0;
@@ -1277,13 +1252,17 @@ class BinaryPlistDecoder
                 ];
         }
 
+
         return {
             uid: value
         };
     }
 
 
-    decodeArray(info, offset)
+    decodeArray(
+        info,
+        offset
+    )
     {
         const result =
             this.decodeLength(
@@ -1291,8 +1270,10 @@ class BinaryPlistDecoder
                 offset
             );
 
+
         let pos =
             result.offset;
+
 
         const array =
             new Array(
@@ -1312,8 +1293,10 @@ class BinaryPlistDecoder
                     this.objectRefSize
                 );
 
+
             pos +=
                 this.objectRefSize;
+
 
             array[i] =
                 this.decodeObject(
@@ -1321,11 +1304,15 @@ class BinaryPlistDecoder
                 );
         }
 
+
         return array;
     }
 
 
-    decodeDictionary(info, offset)
+    decodeDictionary(
+        info,
+        offset
+    )
     {
         const result =
             this.decodeLength(
@@ -1333,18 +1320,25 @@ class BinaryPlistDecoder
                 offset
             );
 
+
         const count =
             result.length;
+
 
         let pos =
             result.offset;
 
 
         const keyRefs =
-            new Array(count);
+            new Array(
+                count
+            );
+
 
         const valueRefs =
-            new Array(count);
+            new Array(
+                count
+            );
 
 
         for (
@@ -1358,6 +1352,7 @@ class BinaryPlistDecoder
                     pos,
                     this.objectRefSize
                 );
+
 
             pos +=
                 this.objectRefSize;
@@ -1376,12 +1371,14 @@ class BinaryPlistDecoder
                     this.objectRefSize
                 );
 
+
             pos +=
                 this.objectRefSize;
         }
 
 
-        const dictionary = {};
+        const dictionary =
+            {};
 
 
         for (
@@ -1394,6 +1391,7 @@ class BinaryPlistDecoder
                 this.decodeObject(
                     keyRefs[i]
                 );
+
 
             const value =
                 this.decodeObject(
@@ -1435,11 +1433,16 @@ class KeyedArchiveResolver
         this.plist =
             plist;
 
+
         this.objects =
             plist["$objects"];
 
 
-        if (!Array.isArray(this.objects))
+        if (
+            !Array.isArray(
+                this.objects
+            )
+        )
         {
             throw new Error(
                 "$objects absent ou invalide."
@@ -1449,6 +1452,7 @@ class KeyedArchiveResolver
 
         this.cache =
             new Map();
+
 
         this.resolving =
             new Set();
@@ -1461,6 +1465,7 @@ class KeyedArchiveResolver
         {
             return uidObject;
         }
+
 
         return this.resolveIndex(
             uidObject.uid
@@ -1482,13 +1487,19 @@ class KeyedArchiveResolver
         }
 
 
-        if (this.cache.has(index))
+        if (
+            this.cache.has(index)
+        )
         {
-            return this.cache.get(index);
+            return this.cache.get(
+                index
+            );
         }
 
 
-        if (this.resolving.has(index))
+        if (
+            this.resolving.has(index)
+        )
         {
             return {
                 "$circularUID": index
@@ -1509,6 +1520,7 @@ class KeyedArchiveResolver
                 index,
                 null
             );
+
 
             return null;
         }
@@ -1602,7 +1614,8 @@ class KeyedArchiveResolver
         )
         {
             return {
-                type: "NSIndexSet",
+                type:
+                    "NSIndexSet",
 
                 count:
                     object["NSRangeCount"],
@@ -1616,7 +1629,7 @@ class KeyedArchiveResolver
 
 
         // ----------------------------------------------------
-        // NSDictionary
+        // NSDictionary NSKeyedArchiver
         // ----------------------------------------------------
 
         if (
@@ -1628,10 +1641,13 @@ class KeyedArchiveResolver
             )
         )
         {
-            const dictionary = {};
+            const dictionary =
+                {};
+
 
             const keys =
                 object["NS.keys"];
+
 
             const values =
                 object["NS.objects"];
@@ -1647,6 +1663,7 @@ class KeyedArchiveResolver
                     this.resolveObject(
                         keys[i]
                     );
+
 
                 const value =
                     this.resolveObject(
@@ -1667,14 +1684,19 @@ class KeyedArchiveResolver
         // Dictionnaire classique
         // ----------------------------------------------------
 
-        const result = {};
+        const result =
+            {};
 
 
         for (
-            const key of Object.keys(object)
+            const key of Object.keys(
+                object
+            )
         )
         {
-            if (key === "$class")
+            if (
+                key === "$class"
+            )
             {
                 continue;
             }
@@ -1734,15 +1756,19 @@ class KeyedArchiveResolver
 // DECODAGE ARCHIVE
 // ============================================================
 
-function decodeGrilleArchive(decoded)
+function decodeGrilleArchive(
+    decoded
+)
 {
     console.log(
         "================================"
     );
 
+
     console.log(
         "DECODAGE BINARY PLIST"
     );
+
 
     console.log(
         "Taille :",
@@ -1762,6 +1788,7 @@ function decodeGrilleArchive(decoded)
 
     window.lastPlist =
         plist;
+
 
     window.lastPlistDecoder =
         decoder;
@@ -1819,21 +1846,27 @@ function decodeGrilleArchive(decoded)
 
 
 // ============================================================
-// EXTRACTION GRILLE
+// EXTRACTION DES DONNÉES DE LA GRILLE
 // ============================================================
 
-function extractGrilleData(root)
+function extractGrilleData(
+    root
+)
 {
     console.log(
         "================================"
     );
+
 
     console.log(
         "EXTRACTION DONNÉES GRILLE"
     );
 
 
-    if (!root || typeof root !== "object")
+    if (
+        !root ||
+        typeof root !== "object"
+    )
     {
         throw new Error(
             "Objet racine NSKeyedArchiver invalide."
@@ -1842,9 +1875,19 @@ function extractGrilleData(root)
 
 
     console.log(
+        "Type root :",
+        typeof root
+    );
+
+
+    console.log(
         "Clés root :",
         Object.keys(root)
     );
+
+
+    const result =
+        root;
 
 
     const expectedKeys =
@@ -1864,14 +1907,14 @@ function extractGrilleData(root)
     {
         if (
             Object.prototype.hasOwnProperty.call(
-                root,
+                result,
                 key
             )
         )
         {
             console.log(
                 key + " :",
-                root[key]
+                result[key]
             );
         }
         else
@@ -1884,7 +1927,12 @@ function extractGrilleData(root)
     }
 
 
-    return root;
+    console.log(
+        "================================"
+    );
+
+
+    return result;
 }
 
 
@@ -1892,30 +1940,37 @@ function extractGrilleData(root)
 // OUVERTURE .GRILLE
 // ============================================================
 
-async function loadGrilleFile(file)
+async function loadGrilleFile(
+    file
+)
 {
     console.log(
         "==============================="
     );
 
+
     console.log(
         "OUVERTURE GRILLE"
     );
+
 
     console.log(
         "Nom :",
         file.name
     );
 
+
     console.log(
         "Taille fichier :",
         file.size
     );
 
+
     console.log(
         "Type :",
         file.type
     );
+
 
     console.log(
         "==============================="
@@ -1940,13 +1995,26 @@ async function loadGrilleFile(file)
         );
 
 
-    if (bytes.length < 8)
+    console.log(
+        "Buffer reçu :",
+        bytes.length,
+        "octets"
+    );
+
+
+    if (
+        bytes.length < 8
+    )
     {
         throw new Error(
             "Fichier .grille trop court."
         );
     }
 
+
+    // ----------------------------------------------------
+    // Taille originale
+    // ----------------------------------------------------
 
     const view =
         new DataView(
@@ -1974,7 +2042,9 @@ async function loadGrilleFile(file)
 
 
     if (
-        !Number.isSafeInteger(originalSize) ||
+        !Number.isSafeInteger(
+            originalSize
+        ) ||
         originalSize <= 0
     )
     {
@@ -1984,8 +2054,14 @@ async function loadGrilleFile(file)
     }
 
 
+    // ----------------------------------------------------
+    // Données LZFSE
+    // ----------------------------------------------------
+
     const compressed =
-        bytes.subarray(8);
+        bytes.subarray(
+            8
+        );
 
 
     console.log(
@@ -1994,7 +2070,9 @@ async function loadGrilleFile(file)
     );
 
 
-    if (compressed.length >= 4)
+    if (
+        compressed.length >= 4
+    )
     {
         const signature =
             String.fromCharCode(
@@ -2011,7 +2089,9 @@ async function loadGrilleFile(file)
         );
 
 
-        if (signature !== "bvx2")
+        if (
+            signature !== "bvx2"
+        )
         {
             console.warn(
                 "Signature LZFSE inattendue :",
@@ -2020,6 +2100,10 @@ async function loadGrilleFile(file)
         }
     }
 
+
+    // ----------------------------------------------------
+    // Décompression
+    // ----------------------------------------------------
 
     const decoded =
         await decompressLZFSE(
@@ -2039,6 +2123,10 @@ async function loadGrilleFile(file)
         decoded;
 
 
+    // ----------------------------------------------------
+    // Binary plist + NSKeyedArchiver
+    // ----------------------------------------------------
+
     const root =
         decodeGrilleArchive(
             decoded
@@ -2055,9 +2143,64 @@ async function loadGrilleFile(file)
         grilleData;
 
 
-    // --------------------------------------------------------
-    // Images
-    // --------------------------------------------------------
+    // ----------------------------------------------------
+    // Informations
+    // ----------------------------------------------------
+
+    console.log(
+        "================================"
+    );
+
+
+    console.log(
+        "ARCHIVE GRILLE"
+    );
+
+
+    console.log(
+        "GRILLE :",
+        grilleData.GRILLE
+    );
+
+
+    console.log(
+        "COULEUR :",
+        grilleData.COULEUR
+    );
+
+
+    console.log(
+        "PALETTE :",
+        grilleData.PALETTE
+    );
+
+
+    console.log(
+        "ENCOURS :",
+        grilleData.ENCOURS
+    );
+
+
+    console.log(
+        "TILESIZE :",
+        grilleData.TILESIZE
+    );
+
+
+    console.log(
+        "TILEORIGIN :",
+        grilleData.TILEORIGIN
+    );
+
+
+    console.log(
+        "================================"
+    );
+
+
+    // ----------------------------------------------------
+    // Chargement des images
+    // ----------------------------------------------------
 
     if (
         grilleData.GRILLE instanceof
@@ -2095,9 +2238,9 @@ async function loadGrilleFile(file)
     }
 
 
-    // --------------------------------------------------------
+    // ----------------------------------------------------
     // Taille des cases
-    // --------------------------------------------------------
+    // ----------------------------------------------------
 
     if (
         typeof grilleData.TILESIZE ===
@@ -2125,9 +2268,9 @@ async function loadGrilleFile(file)
     }
 
 
-    // --------------------------------------------------------
+    // ----------------------------------------------------
     // Cases cochées
-    // --------------------------------------------------------
+    // ----------------------------------------------------
 
     selectedTiles =
         decodeNSIndexSet(
@@ -2141,9 +2284,9 @@ async function loadGrilleFile(file)
     );
 
 
-    // --------------------------------------------------------
-    // Grille
-    // --------------------------------------------------------
+    // ----------------------------------------------------
+    // Affichage
+    // ----------------------------------------------------
 
     recomputeGrid();
 
@@ -2176,14 +2319,21 @@ async function loadGrilleFile(file)
     console.log(
         "GRILLE CHARGÉE"
     );
+
+
+    console.log(
+        "================================"
+    );
 }
 
 
 // ============================================================
-// IMAGE
+// NSData -> IMAGE
 // ============================================================
 
-function imageFromBytes(bytes)
+function imageFromBytes(
+    bytes
+)
 {
     return new Promise(
         (resolve, reject) =>
@@ -2194,13 +2344,22 @@ function imageFromBytes(bytes)
             );
 
 
-            if (!(bytes instanceof Uint8Array))
+            if (
+                !(bytes instanceof Uint8Array)
+            )
             {
+                console.error(
+                    "imageFromBytes : ce n'est pas un Uint8Array",
+                    bytes
+                );
+
+
                 reject(
                     new Error(
                         "Données image invalides"
                     )
                 );
+
 
                 return;
             }
@@ -2215,10 +2374,23 @@ function imageFromBytes(bytes)
                 );
 
 
+            console.log(
+                "imageFromBytes : Blob créé",
+                blob.size,
+                blob.type
+            );
+
+
             const url =
                 URL.createObjectURL(
                     blob
                 );
+
+
+            console.log(
+                "imageFromBytes : URL",
+                url
+            );
 
 
             const img =
@@ -2226,18 +2398,18 @@ function imageFromBytes(bytes)
 
 
             img.onload =
-                function ()
+                () =>
                 {
-                    URL.revokeObjectURL(
-                        url
-                    );
-
-
                     console.log(
                         "imageFromBytes : IMAGE CHARGÉE",
                         img.width,
                         "x",
                         img.height
+                    );
+
+
+                    URL.revokeObjectURL(
+                        url
                     );
 
 
@@ -2248,10 +2420,10 @@ function imageFromBytes(bytes)
 
 
             img.onerror =
-                function (event)
+                (event) =>
                 {
                     console.error(
-                        "imageFromBytes : ERREUR",
+                        "imageFromBytes : ERREUR CHARGEMENT IMAGE",
                         event
                     );
 
@@ -2280,7 +2452,9 @@ function imageFromBytes(bytes)
 // NSINDEXSET
 // ============================================================
 
-function decodeNSIndexSet(value)
+function decodeNSIndexSet(
+    value
+)
 {
     const result =
         new Set();
@@ -2292,28 +2466,45 @@ function decodeNSIndexSet(value)
     }
 
 
+    // ----------------------------------------------------
+    // Cas simple : tableau d'indices
+    // ----------------------------------------------------
+
     if (Array.isArray(value))
     {
         for (
             const index of value
         )
         {
-            if (Number.isInteger(index))
+            if (
+                Number.isInteger(index)
+            )
             {
-                result.add(index);
+                result.add(
+                    index
+                );
             }
         }
+
 
         return result;
     }
 
 
-    if (value.type !== "NSIndexSet")
+    // ----------------------------------------------------
+    // Vérification NSIndexSet
+    // ----------------------------------------------------
+
+    if (
+        value.type !==
+        "NSIndexSet"
+    )
     {
         console.warn(
             "Objet NSIndexSet inattendu :",
             value
         );
+
 
         return result;
     }
@@ -2329,15 +2520,28 @@ function decodeNSIndexSet(value)
         value.rangeData;
 
 
-    if (!(data instanceof Uint8Array))
+    if (
+        !(data instanceof Uint8Array)
+    )
     {
         console.warn(
             "NSRangeData absent."
         );
 
+
         return result;
     }
 
+
+    console.log(
+        "NSRangeData taille :",
+        data.length
+    );
+
+
+    // ----------------------------------------------------
+    // PackedUIntSequence
+    // ----------------------------------------------------
 
     function decodePackedUInt(
         bytes,
@@ -2348,11 +2552,16 @@ function decodeNSIndexSet(value)
             bytes[offset++];
 
 
-        if (first < 128)
+        if (
+            first < 128
+        )
         {
             return {
-                value: first,
-                nextOffset: offset
+                value:
+                    first,
+
+                nextOffset:
+                    offset
             };
         }
 
@@ -2366,22 +2575,29 @@ function decodeNSIndexSet(value)
 
 
         while (
-            offset < bytes.length
+            offset <
+            bytes.length
         )
         {
             const byte =
                 bytes[offset++];
 
 
-            if (byte < 128)
+            if (
+                byte < 128
+            )
             {
                 value +=
-                    multiplier * byte;
+                    multiplier *
+                    byte;
 
 
                 return {
-                    value: value,
-                    nextOffset: offset
+                    value:
+                        value,
+
+                    nextOffset:
+                        offset
                 };
             }
 
@@ -2397,20 +2613,26 @@ function decodeNSIndexSet(value)
 
 
         throw new Error(
-            "NSRangeData tronqué."
+            "NSRangeData tronqué pendant le décodage PackedUIntSequence."
         );
     }
 
+
+    // ----------------------------------------------------
+    // Décodage de tous les UInt
+    // ----------------------------------------------------
 
     const integers =
         [];
 
 
-    let offset = 0;
+    let offset =
+        0;
 
 
     while (
-        offset < data.length
+        offset <
+        data.length
     )
     {
         const decoded =
@@ -2437,6 +2659,10 @@ function decodeNSIndexSet(value)
     );
 
 
+    // ----------------------------------------------------
+    // Chaque plage = location + length
+    // ----------------------------------------------------
+
     const expectedIntegerCount =
         value.count * 2;
 
@@ -2455,7 +2681,12 @@ function decodeNSIndexSet(value)
     }
 
 
-    let decodedCount = 0;
+    // ----------------------------------------------------
+    // Conversion des plages
+    // ----------------------------------------------------
+
+    let decodedCount =
+        0;
 
 
     for (
@@ -2467,11 +2698,22 @@ function decodeNSIndexSet(value)
         const location =
             integers[i];
 
+
         const length =
             integers[i + 1];
 
 
-        if (length <= 0)
+        console.log(
+            "NSIndexSet range :",
+            location,
+            "+",
+            length
+        );
+
+
+        if (
+            length <= 0
+        )
         {
             continue;
         }
@@ -2514,7 +2756,9 @@ function decodeNSIndexSet(value)
 // IMAGE SIMPLE
 // ============================================================
 
-async function loadImageFile(file)
+async function loadImageFile(
+    file
+)
 {
     console.log(
         "Chargement image :",
@@ -2543,11 +2787,14 @@ async function loadImageFile(file)
             sourceImage =
                 image;
 
+
             colorImage =
                 null;
 
+
             paletteImage =
                 null;
+
 
             selectedTiles =
                 new Set();
@@ -2618,10 +2865,10 @@ function recomputeGrid()
         cols = 0;
         rows = 0;
 
-        worldWidth = 0;
-        worldHeight = 0;
 
-        draw();
+        canvas.width = 1;
+        canvas.height = 1;
+
 
         return;
     }
@@ -2641,12 +2888,14 @@ function recomputeGrid()
         );
 
 
-    worldWidth =
-        cols * tileSize;
+    // --------------------------------------------------------
+    // IMPORTANT :
+    //
+    // Le canvas garde maintenant sa taille logique de viewport.
+    // Les dimensions de la grille sont des coordonnées monde.
+    // --------------------------------------------------------
 
-
-    worldHeight =
-        rows * tileSize;
+    resizeCanvasToWorkspace();
 
 
     console.log(
@@ -2656,27 +2905,49 @@ function recomputeGrid()
         rows,
         "cases"
     );
-
-
-    console.log(
-        "Monde :",
-        worldWidth,
-        "x",
-        worldHeight
-    );
 }
 
 
 // ============================================================
-// DESSIN
+// RESIZE CANVAS
 // ============================================================
 
-function draw()
+function resizeCanvasToWorkspace()
 {
-    if (!ctx || !canvas)
+    if (!canvas)
     {
         return;
     }
+
+
+    const workspace =
+        document.getElementById(
+            "workspace"
+        );
+
+
+    if (!workspace)
+    {
+        return;
+    }
+
+
+    const rect =
+        workspace.getBoundingClientRect();
+
+
+    const width =
+        Math.max(
+            1,
+            Math.round(rect.width)
+        );
+
+
+    const height =
+        Math.max(
+            1,
+            Math.round(rect.height)
+        );
 
 
     const dpr =
@@ -2686,335 +2957,154 @@ function draw()
         );
 
 
-    const vw =
-        viewportWidth();
-
-    const vh =
-        viewportHeight();
-
-
-    // --------------------------------------------------------
-    // Coordonnées en pixels CSS
-    // --------------------------------------------------------
-
-    ctx.setTransform(
-        dpr,
-        0,
-        0,
-        dpr,
-        0,
-        0
-    );
-
-
-    ctx.clearRect(
-        0,
-        0,
-        vw,
-        vh
-    );
-
-
-    if (!sourceImage)
-    {
-        ctx.fillStyle =
-            "#303030";
-
-        ctx.fillRect(
-            0,
-            0,
-            vw,
-            vh
+    canvas.width =
+        Math.round(
+            width * dpr
         );
 
-        return;
-    }
+
+    canvas.height =
+        Math.round(
+            height * dpr
+        );
 
 
-    // --------------------------------------------------------
-    // Caméra
-    // --------------------------------------------------------
-
-    ctx.save();
+    canvas.style.width =
+        width + "px";
 
 
-    ctx.translate(
-        panX,
-        panY
-    );
-
-
-    ctx.scale(
-        zoomFactor,
-        zoomFactor
-    );
-
-
-    // --------------------------------------------------------
-    // Image principale
-    // --------------------------------------------------------
-
-    ctx.drawImage(
-        sourceImage,
-        0,
-        0,
-        worldWidth,
-        worldHeight
-    );
-
-
-    // --------------------------------------------------------
-    // Cases sélectionnées
-    //
-    // COULEUR contient l'image correspondant aux
-    // couleurs de la grille.
-    // --------------------------------------------------------
-
-    if (selectedTiles.size > 0)
-    {
-        drawSelectedTiles();
-    }
-
-
-    // --------------------------------------------------------
-    // Grille
-    // --------------------------------------------------------
-
-    drawGrid();
-
-
-    ctx.restore();
+    canvas.style.height =
+        height + "px";
 }
 
 
 // ============================================================
-// CASES SELECTIONNEES
+// CAMERA
 // ============================================================
 
-function drawSelectedTiles()
+function getViewportSize()
 {
-    if (!selectedTiles)
+    if (!canvas)
     {
-        return;
+        return {
+            width: 1,
+            height: 1
+        };
     }
 
 
-    // --------------------------------------------------------
-    // Si COULEUR est disponible :
-    // dessiner la couleur réelle de chaque case.
-    //
-    // Sinon, utiliser un léger voile rouge de secours.
-    // --------------------------------------------------------
-
-    const hasColorImage =
-        colorImage &&
-        colorImage.width > 0 &&
-        colorImage.height > 0;
+    const rect =
+        canvas.getBoundingClientRect();
 
 
-    if (!hasColorImage)
+    return {
+        width:
+            rect.width,
+
+        height:
+            rect.height
+    };
+}
+
+
+function resetCamera()
+{
+    if (!sourceImage)
     {
-        ctx.save();
+        zoomFactor = 1.0;
 
-        ctx.fillStyle =
-            "rgba(255,0,0,0.35)";
-
-
-        for (
-            const index of selectedTiles
-        )
-        {
-            if (
-                index < 0 ||
-                index >= cols * rows
-            )
-            {
-                continue;
-            }
-
-
-            const col =
-                index % cols;
-
-            const row =
-                Math.floor(
-                    index / cols
-                );
-
-
-            ctx.fillRect(
-                col * tileSize,
-                row * tileSize,
-                tileSize,
-                tileSize
-            );
-        }
-
-
-        ctx.restore();
+        panX = 0;
+        panY = 0;
 
         return;
     }
 
 
-    // --------------------------------------------------------
-    // Image COULEUR
-    // --------------------------------------------------------
+    const viewport =
+        getViewportSize();
 
-    const colorScaleX =
-        colorImage.width /
+
+    const worldWidth =
+        cols * tileSize;
+
+
+    const worldHeight =
+        rows * tileSize;
+
+
+    if (
+        worldWidth <= 0 ||
+        worldHeight <= 0
+    )
+    {
+        zoomFactor = 1.0;
+
+        panX = 0;
+        panY = 0;
+
+        return;
+    }
+
+
+    const scaleX =
+        viewport.width /
         worldWidth;
 
-    const colorScaleY =
-        colorImage.height /
+
+    const scaleY =
+        viewport.height /
         worldHeight;
 
 
-    ctx.save();
+    zoomFactor =
+        Math.min(
+            scaleX,
+            scaleY
+        );
 
 
-    for (
-        const index of selectedTiles
-    )
-    {
-        if (
-            index < 0 ||
-            index >= cols * rows
-        )
+    zoomFactor =
+        Math.max(
+            0.05,
+            Math.min(
+                10.0,
+                zoomFactor
+            )
+        );
+
+
+    panX =
+        (
+            viewport.width -
+            worldWidth * zoomFactor
+        ) / 2;
+
+
+    panY =
+        (
+            viewport.height -
+            worldHeight * zoomFactor
+        ) / 2;
+
+
+    console.log(
+        "Camera reset :",
         {
-            continue;
+            zoom:
+                zoomFactor,
+
+            panX:
+                panX,
+
+            panY:
+                panY
         }
-
-
-        const col =
-            index % cols;
-
-        const row =
-            Math.floor(
-                index / cols
-            );
-
-
-        const x =
-            col * tileSize;
-
-        const y =
-            row * tileSize;
-
-
-        const sx =
-            x * colorScaleX;
-
-        const sy =
-            y * colorScaleY;
-
-        const sw =
-            tileSize * colorScaleX;
-
-        const sh =
-            tileSize * colorScaleY;
-
-
-        ctx.drawImage(
-            colorImage,
-
-            sx,
-            sy,
-            sw,
-            sh,
-
-            x,
-            y,
-            tileSize,
-            tileSize
-        );
-    }
-
-
-    ctx.restore();
+    );
 }
 
 
 // ============================================================
-// GRILLE VISUELLE
-// ============================================================
-
-function drawGrid()
-{
-    ctx.save();
-
-
-    ctx.strokeStyle =
-        "rgba(0,0,0,0.35)";
-
-
-    // Important :
-    // l'épaisseur doit rester lisible même après zoom.
-
-    ctx.lineWidth =
-        1 / zoomFactor;
-
-
-    ctx.beginPath();
-
-
-    for (
-        let col = 0;
-        col <= cols;
-        col++
-    )
-    {
-        const x =
-            col * tileSize +
-            0.5 / zoomFactor;
-
-
-        ctx.moveTo(
-            x,
-            0
-        );
-
-
-        ctx.lineTo(
-            x,
-            worldHeight
-        );
-    }
-
-
-    for (
-        let row = 0;
-        row <= rows;
-        row++
-    )
-    {
-        const y =
-            row * tileSize +
-            0.5 / zoomFactor;
-
-
-        ctx.moveTo(
-            0,
-            y
-        );
-
-
-        ctx.lineTo(
-            worldWidth,
-            y
-        );
-    }
-
-
-    ctx.stroke();
-
-
-    ctx.restore();
-}
-
-
-// ============================================================
-// COORDONNEES
+// POINT ÉCRAN -> MONDE
 // ============================================================
 
 function canvasPointFromClient(
@@ -3049,7 +3139,294 @@ function canvasPointFromClient(
 
 
 // ============================================================
-// TILE
+// DESSIN
+// ============================================================
+
+function draw()
+{
+    if (!canvas || !ctx)
+    {
+        return;
+    }
+
+
+    // --------------------------------------------------------
+    // Dimensions CSS du viewport
+    // --------------------------------------------------------
+
+    const rect =
+        canvas.getBoundingClientRect();
+
+
+    const viewportWidth =
+        rect.width;
+
+
+    const viewportHeight =
+        rect.height;
+
+
+    const dpr =
+        Math.max(
+            1,
+            window.devicePixelRatio || 1
+        );
+
+
+    // --------------------------------------------------------
+    // Réinitialisation DPR
+    // --------------------------------------------------------
+
+    ctx.setTransform(
+        dpr,
+        0,
+        0,
+        dpr,
+        0,
+        0
+    );
+
+
+    ctx.clearRect(
+        0,
+        0,
+        viewportWidth,
+        viewportHeight
+    );
+
+
+    if (!sourceImage)
+    {
+        return;
+    }
+
+
+    // --------------------------------------------------------
+    // Caméra
+    // --------------------------------------------------------
+
+    ctx.save();
+
+
+    ctx.translate(
+        panX,
+        panY
+    );
+
+
+    ctx.scale(
+        zoomFactor,
+        zoomFactor
+    );
+
+
+    // --------------------------------------------------------
+    // Dimensions monde
+    // --------------------------------------------------------
+
+    const worldWidth =
+        cols * tileSize;
+
+
+    const worldHeight =
+        rows * tileSize;
+
+
+    // --------------------------------------------------------
+    // Image source
+    // --------------------------------------------------------
+
+    ctx.drawImage(
+        sourceImage,
+        0,
+        0,
+        worldWidth,
+        worldHeight
+    );
+
+
+    // --------------------------------------------------------
+    // Cases sélectionnées
+    // --------------------------------------------------------
+
+    if (selectedTiles)
+    {
+        for (
+            const index of selectedTiles
+        )
+        {
+            if (
+                index < 0 ||
+                index >= cols * rows
+            )
+            {
+                continue;
+            }
+
+
+            const col =
+                index % cols;
+
+
+            const row =
+                Math.floor(
+                    index / cols
+                );
+
+
+            const x =
+                col * tileSize;
+
+
+            const y =
+                row * tileSize;
+
+
+            // ------------------------------------------------
+            // Si COULEUR existe :
+            //
+            // on affiche la couleur réelle de la case.
+            // ------------------------------------------------
+
+            if (colorImage)
+            {
+                const sx =
+                    x *
+                    colorImage.width /
+                    worldWidth;
+
+
+                const sy =
+                    y *
+                    colorImage.height /
+                    worldHeight;
+
+
+                const sw =
+                    tileSize *
+                    colorImage.width /
+                    worldWidth;
+
+
+                const sh =
+                    tileSize *
+                    colorImage.height /
+                    worldHeight;
+
+
+                ctx.drawImage(
+                    colorImage,
+
+                    sx,
+                    sy,
+                    sw,
+                    sh,
+
+                    x,
+                    y,
+                    tileSize,
+                    tileSize
+                );
+            }
+            else
+            {
+                // ------------------------------------------------
+                // Image simple : overlay rouge translucide.
+                // ------------------------------------------------
+
+                ctx.fillStyle =
+                    "rgba(255, 0, 0, 0.35)";
+
+
+                ctx.fillRect(
+                    x,
+                    y,
+                    tileSize,
+                    tileSize
+                );
+            }
+        }
+    }
+
+
+    // --------------------------------------------------------
+    // Grille
+    // --------------------------------------------------------
+
+    ctx.save();
+
+
+    ctx.strokeStyle =
+        "rgba(0, 0, 0, 0.35)";
+
+
+    ctx.lineWidth =
+        1 / zoomFactor;
+
+
+    ctx.beginPath();
+
+
+    for (
+        let col = 0;
+        col <= cols;
+        col++
+    )
+    {
+        const x =
+            col * tileSize +
+            0.5;
+
+
+        ctx.moveTo(
+            x,
+            0
+        );
+
+
+        ctx.lineTo(
+            x,
+            worldHeight
+        );
+    }
+
+
+    for (
+        let row = 0;
+        row <= rows;
+        row++
+    )
+    {
+        const y =
+            row * tileSize +
+            0.5;
+
+
+        ctx.moveTo(
+            0,
+            y
+        );
+
+
+        ctx.lineTo(
+            worldWidth,
+            y
+        );
+    }
+
+
+    ctx.stroke();
+
+
+    ctx.restore();
+
+
+    ctx.restore();
+}
+
+
+// ============================================================
+// SELECTION
 // ============================================================
 
 function tileIndexForPoint(
@@ -3087,6 +3464,10 @@ function tileIndexForPoint(
 }
 
 
+// ============================================================
+// TOGGLE
+// ============================================================
+
 function toggleTileAt(
     x,
     y
@@ -3106,14 +3487,20 @@ function toggleTileAt(
 
 
     if (
-        selectedTiles.has(index)
+        selectedTiles.has(
+            index
+        )
     )
     {
-        selectedTiles.delete(index);
+        selectedTiles.delete(
+            index
+        );
     }
     else
     {
-        selectedTiles.add(index);
+        selectedTiles.add(
+            index
+        );
     }
 
 
@@ -3122,7 +3509,7 @@ function toggleTileAt(
 
 
 // ============================================================
-// SELECTION PENDANT GLISSEMENT
+// SELECTION PAR GLISSEMENT
 // ============================================================
 
 function selectTileAt(
@@ -3143,9 +3530,16 @@ function selectTileAt(
     }
 
 
-    if (!selectedTiles.has(index))
+    if (
+        !selectedTiles.has(
+            index
+        )
+    )
     {
-        selectedTiles.add(index);
+        selectedTiles.add(
+            index
+        );
+
 
         draw();
     }
@@ -3153,11 +3547,25 @@ function selectTileAt(
 
 
 // ============================================================
-// POINTERS
+// POINTER DOWN
 // ============================================================
 
-function handlePointerDown(event)
+function handlePointerDown(
+    event
+)
 {
+    // --------------------------------------------------------
+    // Les événements tactiles sont traités par touch*.
+    // --------------------------------------------------------
+
+    if (
+        event.pointerType === "touch"
+    )
+    {
+        return;
+    }
+
+
     event.preventDefault();
 
 
@@ -3175,81 +3583,50 @@ function handlePointerDown(event)
     activePointers.set(
         event.pointerId,
         {
-            x: event.clientX,
-            y: event.clientY,
-            type: event.pointerType,
-            buttons: event.buttons
+            x:
+                event.clientX,
+
+            y:
+                event.clientY,
+
+            type:
+                event.pointerType,
+
+            buttons:
+                event.buttons
         }
     );
 
 
-    // --------------------------------------------------------
-    // Deuxième doigt :
-    // passage immédiat en mode pinch
-    // --------------------------------------------------------
-
-    if (activePointers.size === 2)
+    if (
+        activePointers.size !== 1
+    )
     {
-        singlePointer = null;
-        singlePointerMoved = false;
-
-        const points =
-            Array.from(
-                activePointers.values()
-            );
-
-
-        lastPinchDistance =
-            distanceBetweenPoints(
-                points[0],
-                points[1]
-            );
-
-
-        const center =
-            centerBetweenPoints(
-                points[0],
-                points[1]
-            );
-
-
-        lastPinchCenterX =
-            center.x;
-
-        lastPinchCenterY =
-            center.y;
-
-
         return;
     }
 
 
-    // --------------------------------------------------------
-    // Premier pointeur
-    // --------------------------------------------------------
-
-    if (activePointers.size === 1)
-    {
-        singlePointer =
-            event.pointerId;
-
-        singlePointerMoved =
-            false;
+    singlePointer =
+        event.pointerId;
 
 
-        const point =
-            canvasPointFromClient(
-                event.clientX,
-                event.clientY
-            );
+    singlePointerMoved =
+        false;
 
 
-        lastPointerWorldX =
-            point.x;
+    const point =
+        canvasPointFromClient(
+            event.clientX,
+            event.clientY
+        );
 
-        lastPointerWorldY =
-            point.y;
-    }
+
+    lastPointerWorldX =
+        point.x;
+
+
+    lastPointerWorldY =
+        point.y;
 }
 
 
@@ -3257,8 +3634,18 @@ function handlePointerDown(event)
 // POINTER MOVE
 // ============================================================
 
-function handlePointerMove(event)
+function handlePointerMove(
+    event
+)
 {
+    if (
+        event.pointerType === "touch"
+    )
+    {
+        return;
+    }
+
+
     event.preventDefault();
 
 
@@ -3275,230 +3662,80 @@ function handlePointerMove(event)
     activePointers.set(
         event.pointerId,
         {
-            x: event.clientX,
-            y: event.clientY,
-            type: event.pointerType,
-            buttons: event.buttons
+            x:
+                event.clientX,
+
+            y:
+                event.clientY,
+
+            type:
+                event.pointerType,
+
+            buttons:
+                event.buttons
         }
     );
 
 
-    // --------------------------------------------------------
-    // PINCH À DEUX DOIGTS
-    // --------------------------------------------------------
-
-    if (activePointers.size >= 2)
+    if (
+        activePointers.size !== 1 ||
+        singlePointer !== event.pointerId
+    )
     {
-        const points =
-            Array.from(
-                activePointers.values()
-            );
-
-
-        const p1 =
-            points[0];
-
-        const p2 =
-            points[1];
-
-
-        const distance =
-            distanceBetweenPoints(
-                p1,
-                p2
-            );
-
-
-        const center =
-            centerBetweenPoints(
-                p1,
-                p2
-            );
-
-
-        if (
-            lastPinchDistance > 0
-        )
-        {
-            const rect =
-                canvas.getBoundingClientRect();
-
-
-            const centerX =
-                center.x -
-                rect.left;
-
-            const centerY =
-                center.y -
-                rect.top;
-
-
-            // ------------------------------------------------
-            // Point monde situé sous le centre du pinch
-            // avant changement de zoom.
-            // ------------------------------------------------
-
-            const worldX =
-                (centerX - panX) /
-                zoomFactor;
-
-            const worldY =
-                (centerY - panY) /
-                zoomFactor;
-
-
-            // ------------------------------------------------
-            // Nouveau zoom
-            // ------------------------------------------------
-
-            const ratio =
-                distance /
-                lastPinchDistance;
-
-
-            let newZoom =
-                zoomFactor * ratio;
-
-
-            newZoom =
-                Math.max(
-                    0.05,
-                    Math.min(
-                        10.0,
-                        newZoom
-                    )
-                );
-
-
-            // ------------------------------------------------
-            // Conserver le point sous les doigts
-            // ------------------------------------------------
-
-            panX =
-                centerX -
-                worldX * newZoom;
-
-
-            panY =
-                centerY -
-                worldY * newZoom;
-
-
-            // ------------------------------------------------
-            // Déplacement du centre du pinch
-            // ------------------------------------------------
-
-            panX +=
-                centerX -
-                lastPinchCenterX;
-
-
-            panY +=
-                centerY -
-                lastPinchCenterY;
-
-
-            zoomFactor =
-                newZoom;
-
-
-            lastPinchDistance =
-                distance;
-
-
-            lastPinchCenterX =
-                centerX;
-
-            lastPinchCenterY =
-                centerY;
-
-
-            draw();
-        }
-
-
         return;
     }
 
 
+    const point =
+        canvasPointFromClient(
+            event.clientX,
+            event.clientY
+        );
+
+
+    const dx =
+        point.x -
+        lastPointerWorldX;
+
+
+    const dy =
+        point.y -
+        lastPointerWorldY;
+
+
+    if (
+        Math.abs(dx) > 2 ||
+        Math.abs(dy) > 2
+    )
+    {
+        singlePointerMoved =
+            true;
+    }
+
+
     // --------------------------------------------------------
-    // UN SEUL POINTEUR
+    // Souris maintenue :
+    // sélection pendant le déplacement.
     // --------------------------------------------------------
 
     if (
-        activePointers.size === 1 &&
-        singlePointer === event.pointerId
+        event.pointerType === "mouse" &&
+        (event.buttons & 1) !== 0
     )
     {
-        const point =
-            canvasPointFromClient(
-                event.clientX,
-                event.clientY
-            );
-
-
-        const dx =
-            point.x -
-            lastPointerWorldX;
-
-
-        const dy =
-            point.y -
-            lastPointerWorldY;
-
-
-        if (
-            Math.abs(dx) > 0.5 ||
-            Math.abs(dy) > 0.5
-        )
-        {
-            singlePointerMoved =
-                true;
-        }
-
-
-        // ----------------------------------------------------
-        // Souris :
-        // seulement si bouton appuyé.
-        //
-        // Doigt :
-        // le pointeur est naturellement actif.
-        // ----------------------------------------------------
-
-        const pointerInfo =
-            activePointers.get(
-                event.pointerId
-            );
-
-
-        const shouldSelect =
-            event.pointerType !== "mouse" ||
-            (event.buttons & 1) !== 0;
-
-
-        if (shouldSelect)
-        {
-            if (
-                tileIndexForPoint(
-                    point.x,
-                    point.y
-                ) >= 0
-            )
-            {
-                selectTileAt(
-                    point.x,
-                    point.y
-                );
-            }
-        }
-
-
-        lastPointerWorldX =
-            point.x;
-
-        lastPointerWorldY =
-            point.y;
+        selectTileAt(
+            point.x,
+            point.y
+        );
     }
+
+
+    lastPointerWorldX =
+        point.x;
+
+
+    lastPointerWorldY =
+        point.y;
 }
 
 
@@ -3506,8 +3743,18 @@ function handlePointerMove(event)
 // POINTER UP
 // ============================================================
 
-function handlePointerUp(event)
+function handlePointerUp(
+    event
+)
 {
+    if (
+        event.pointerType === "touch"
+    )
+    {
+        return;
+    }
+
+
     event.preventDefault();
 
 
@@ -3517,8 +3764,8 @@ function handlePointerUp(event)
 
 
     // --------------------------------------------------------
-    // Pour un simple clic/tap sans déplacement :
-    // toggle de la case.
+    // Clic sans déplacement :
+    // toggle.
     // --------------------------------------------------------
 
     if (
@@ -3556,45 +3803,37 @@ function handlePointerUp(event)
     }
 
 
-    // --------------------------------------------------------
-    // Fin du pinch
-    // --------------------------------------------------------
-
-    if (activePointers.size < 2)
+    if (
+        activePointers.size === 0
+    )
     {
-        lastPinchDistance = 0;
-    }
+        singlePointer =
+            null;
 
 
-    // --------------------------------------------------------
-    // Plus aucun pointeur
-    // --------------------------------------------------------
-
-    if (activePointers.size === 0)
-    {
-        singlePointer = null;
-        singlePointerMoved = false;
-        lastPinchDistance = 0;
+        singlePointerMoved =
+            false;
     }
 }
 
 
 // ============================================================
-// GEOMETRIE PINCH
+// DISTANCE ENTRE DEUX TOUCHES
 // ============================================================
 
-function distanceBetweenPoints(
-    p1,
-    p2
+function distanceBetweenTouches(
+    touch1,
+    touch2
 )
 {
     const dx =
-        p1.x -
-        p2.x;
+        touch1.clientX -
+        touch2.clientX;
+
 
     const dy =
-        p1.y -
-        p2.y;
+        touch1.clientY -
+        touch2.clientY;
 
 
     return Math.sqrt(
@@ -3604,18 +3843,385 @@ function distanceBetweenPoints(
 }
 
 
-function centerBetweenPoints(
-    p1,
-    p2
+// ============================================================
+// TOUCH START
+// ============================================================
+
+function handleTouchStart(
+    event
 )
 {
-    return {
-        x:
-            (p1.x + p2.x) / 2,
+    event.preventDefault();
 
-        y:
-            (p1.y + p2.y) / 2
-    };
+
+    touchInteractionActive =
+        true;
+
+
+    // --------------------------------------------------------
+    // Deux doigts = début du pinch
+    // --------------------------------------------------------
+
+    if (
+        event.touches.length === 2
+    )
+    {
+        const t1 =
+            event.touches[0];
+
+
+        const t2 =
+            event.touches[1];
+
+
+        lastPinchDistance =
+            distanceBetweenTouches(
+                t1,
+                t2
+            );
+
+
+        const rect =
+            canvas.getBoundingClientRect();
+
+
+        lastPinchCenterX =
+            (
+                (t1.clientX +
+                 t2.clientX) /
+                2
+            ) -
+            rect.left;
+
+
+        lastPinchCenterY =
+            (
+                (t1.clientY +
+                 t2.clientY) /
+                2
+            ) -
+            rect.top;
+
+
+        // ----------------------------------------------------
+        // Le passage de 1 à 2 doigts annule le tap.
+        // ----------------------------------------------------
+
+        singlePointerMoved =
+            true;
+
+
+        return;
+    }
+
+
+    // --------------------------------------------------------
+    // Un doigt
+    // --------------------------------------------------------
+
+    if (
+        event.touches.length === 1
+    )
+    {
+        const touch =
+            event.touches[0];
+
+
+        const point =
+            canvasPointFromClient(
+                touch.clientX,
+                touch.clientY
+            );
+
+
+        singlePointerMoved =
+            false;
+
+
+        lastPointerWorldX =
+            point.x;
+
+
+        lastPointerWorldY =
+            point.y;
+    }
+}
+
+
+// ============================================================
+// TOUCH MOVE
+// ============================================================
+
+function handleTouchMove(
+    event
+)
+{
+    event.preventDefault();
+
+
+    // --------------------------------------------------------
+    // PINCH / DÉPLACEMENT À DEUX DOIGTS
+    // --------------------------------------------------------
+
+    if (
+        event.touches.length === 2
+    )
+    {
+        const t1 =
+            event.touches[0];
+
+
+        const t2 =
+            event.touches[1];
+
+
+        const distance =
+            distanceBetweenTouches(
+                t1,
+                t2
+            );
+
+
+        const rect =
+            canvas.getBoundingClientRect();
+
+
+        const centerX =
+            (
+                (t1.clientX +
+                 t2.clientX) /
+                2
+            ) -
+            rect.left;
+
+
+        const centerY =
+            (
+                (t1.clientY +
+                 t2.clientY) /
+                2
+            ) -
+            rect.top;
+
+
+        if (
+            lastPinchDistance > 0
+        )
+        {
+            // ------------------------------------------------
+            // Coordonnée monde sous le centre des doigts
+            // avant le changement de zoom.
+            // ------------------------------------------------
+
+            const worldX =
+                (
+                    centerX -
+                    panX
+                ) /
+                zoomFactor;
+
+
+            const worldY =
+                (
+                    centerY -
+                    panY
+                ) /
+                zoomFactor;
+
+
+            // ------------------------------------------------
+            // Nouveau zoom
+            // ------------------------------------------------
+
+            const ratio =
+                distance /
+                lastPinchDistance;
+
+
+            let newZoom =
+                zoomFactor *
+                ratio;
+
+
+            newZoom =
+                Math.max(
+                    0.05,
+                    Math.min(
+                        10.0,
+                        newZoom
+                    )
+                );
+
+
+            // ------------------------------------------------
+            // Conserver le point sous les doigts.
+            // ------------------------------------------------
+
+            panX =
+                centerX -
+                worldX *
+                newZoom;
+
+
+            panY =
+                centerY -
+                worldY *
+                newZoom;
+
+
+            // ------------------------------------------------
+            // Déplacement du centre des doigts.
+            // ------------------------------------------------
+
+            panX +=
+                centerX -
+                lastPinchCenterX;
+
+
+            panY +=
+                centerY -
+                lastPinchCenterY;
+
+
+            zoomFactor =
+                newZoom;
+
+
+            lastPinchDistance =
+                distance;
+
+
+            lastPinchCenterX =
+                centerX;
+
+
+            lastPinchCenterY =
+                centerY;
+
+
+            draw();
+        }
+
+
+        return;
+    }
+
+
+    // --------------------------------------------------------
+    // UN DOIGT
+    // --------------------------------------------------------
+
+    if (
+        event.touches.length === 1
+    )
+    {
+        const touch =
+            event.touches[0];
+
+
+        const point =
+            canvasPointFromClient(
+                touch.clientX,
+                touch.clientY
+            );
+
+
+        const dx =
+            point.x -
+            lastPointerWorldX;
+
+
+        const dy =
+            point.y -
+            lastPointerWorldY;
+
+
+        if (
+            Math.abs(dx) > 2 ||
+            Math.abs(dy) > 2
+        )
+        {
+            singlePointerMoved =
+                true;
+        }
+
+
+        if (
+            singlePointerMoved
+        )
+        {
+            selectTileAt(
+                point.x,
+                point.y
+            );
+        }
+
+
+        lastPointerWorldX =
+            point.x;
+
+
+        lastPointerWorldY =
+            point.y;
+    }
+}
+
+
+// ============================================================
+// TOUCH END
+// ============================================================
+
+function handleTouchEnd(
+    event
+)
+{
+    event.preventDefault();
+
+
+    // --------------------------------------------------------
+    // Un doigt sans déplacement = TAP
+    // --------------------------------------------------------
+
+    if (
+        event.touches.length === 0 &&
+        !singlePointerMoved
+    )
+    {
+        toggleTileAt(
+            lastPointerWorldX,
+            lastPointerWorldY
+        );
+    }
+
+
+    // --------------------------------------------------------
+    // Fin du pinch
+    // --------------------------------------------------------
+
+    if (
+        event.touches.length < 2
+    )
+    {
+        lastPinchDistance =
+            0;
+    }
+
+
+    // --------------------------------------------------------
+    // Plus aucun doigt
+    // --------------------------------------------------------
+
+    if (
+        event.touches.length === 0
+    )
+    {
+        singlePointerMoved =
+            false;
+
+
+        touchInteractionActive =
+            false;
+    }
 }
 
 
@@ -3626,6 +4232,7 @@ function centerBetweenPoints(
 function clearSelection()
 {
     selectedTiles.clear();
+
 
     draw();
 
