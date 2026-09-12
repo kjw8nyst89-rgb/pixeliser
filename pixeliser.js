@@ -1697,6 +1697,10 @@ function decodeGrilleArchive(
 // EXTRACTION DES DONNÉES DE LA GRILLE
 // ============================================================
 
+// ============================================================
+// EXTRACTION DES DONNÉES DE LA GRILLE
+// ============================================================
+
 function extractGrilleData(root)
 {
     console.log(
@@ -1707,10 +1711,10 @@ function extractGrilleData(root)
         "EXTRACTION DONNÉES GRILLE"
     );
 
-    if (!root)
+    if (!root || typeof root !== "object")
     {
         throw new Error(
-            "Objet racine NSKeyedArchiver absent."
+            "Objet racine NSKeyedArchiver invalide."
         );
     }
 
@@ -1727,91 +1731,21 @@ function extractGrilleData(root)
 
 
     // --------------------------------------------------------
-    // Vérification dictionnaire NSDictionary
+    // IMPORTANT :
+    //
+    // decodeGrilleArchive() a déjà résolu le
+    // NSDictionary NSKeyedArchiver.
+    //
+    // root EST donc directement le dictionnaire
+    // contenant GRILLE, COULEUR, PALETTE, etc.
     // --------------------------------------------------------
 
-    const keys =
-        root["NS.keys"];
-
-    const objects =
-        root["NS.objects"];
-
-
-    if (!Array.isArray(keys))
-    {
-        throw new Error(
-            "NS.keys absent ou invalide."
-        );
-    }
-
-
-    if (!Array.isArray(objects))
-    {
-        throw new Error(
-            "NS.objects absent ou invalide."
-        );
-    }
-
-
-    console.log(
-        "Nombre de clés :",
-        keys.length
-    );
-
-    console.log(
-        "Nombre de valeurs :",
-        objects.length
-    );
-
-
-    if (
-        keys.length !==
-        objects.length
-    )
-    {
-        throw new Error(
-            "NS.keys et NS.objects n'ont pas la même taille."
-        );
-    }
+    const result =
+        root;
 
 
     // --------------------------------------------------------
-    // Construction du dictionnaire
-    // --------------------------------------------------------
-
-    const result = {};
-
-
-    for (
-        let i = 0;
-        i < keys.length;
-        i++
-    )
-    {
-        const key =
-            keys[i];
-
-        const value =
-            objects[i];
-
-
-        console.log(
-            "Élément",
-            i,
-            ":",
-            key,
-            "=>",
-            value
-        );
-
-
-        result[key] =
-            value;
-    }
-
-
-    // --------------------------------------------------------
-    // Vérification des clés attendues
+    // Vérification
     // --------------------------------------------------------
 
     const expectedKeys =
@@ -1829,10 +1763,25 @@ function extractGrilleData(root)
         const key of expectedKeys
     )
     {
-        console.log(
-            key + " :",
-            result[key]
-        );
+        if (
+            Object.prototype.hasOwnProperty.call(
+                result,
+                key
+            )
+        )
+        {
+            console.log(
+                key + " :",
+                result[key]
+            );
+        }
+        else
+        {
+            console.warn(
+                "Clé absente :",
+                key
+            );
+        }
     }
 
 
