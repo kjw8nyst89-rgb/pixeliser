@@ -21,19 +21,13 @@ let tileSize = 20;
 
 let selectedTiles = new Set();
 
-
-// ============================================================
-// CAMERA
-// ============================================================
-
 let zoomFactor = 1.0;
-
 let panX = 0;
 let panY = 0;
 
 
 // ============================================================
-// POINTER / TOUCH
+// INTERACTION
 // ============================================================
 
 let activePointers = new Map();
@@ -44,13 +38,7 @@ let singlePointerMoved = false;
 let lastPointerWorldX = 0;
 let lastPointerWorldY = 0;
 
-
-// ============================================================
-// PINCH
-// ============================================================
-
 let lastPinchDistance = 0;
-
 let lastPinchCenterX = 0;
 let lastPinchCenterY = 0;
 
@@ -61,415 +49,1241 @@ let touchInteractionActive = false;
 // INITIALISATION
 // ============================================================
 
-document.addEventListener(
-    "DOMContentLoaded",
-    async function ()
+document.addEventListener("DOMContentLoaded", function ()
+{
+    console.log("Pixeliser démarrage...");
+
+    canvas = document.getElementById("canvas");
+    ctx = canvas.getContext("2d");
+
+    const openButton =
+        document.getElementById("openButton");
+
+    const imageInput =
+        document.getElementById("imageInput");
+
+    const openGrilleButton =
+        document.getElementById("openGrilleButton");
+
+    const grilleInput =
+        document.getElementById("grilleInput");
+
+    const clearButton =
+        document.getElementById("clearButton");
+
+    const tileSizeInput =
+        document.getElementById("tileSize");
+
+
+    // --------------------------------------------------------
+    // IMAGE
+    // --------------------------------------------------------
+
+    openButton.addEventListener("click", function ()
     {
-        console.log(
-            "Pixeliser démarrage..."
-        );
- console.log(
-        "Version 10"
-    );
+        imageInput.click();
+    });
 
+    imageInput.addEventListener("change", function ()
+    {
+        const file = imageInput.files[0];
 
-        canvas =
-            document.getElementById(
-                "canvas"
-            );
-
-
-        if (!canvas)
-        {
-            console.error(
-                "Canvas introuvable."
-            );
-
+        if (!file)
             return;
-        }
+
+        loadImageFile(file);
+    });
 
 
-        ctx =
-            canvas.getContext(
-                "2d"
-            );
+    // --------------------------------------------------------
+    // GRILLE
+    // --------------------------------------------------------
 
+    openGrilleButton.addEventListener("click", function ()
+    {
+        grilleInput.click();
+    });
 
-        if (!ctx)
-        {
-            console.error(
-                "Impossible de créer le contexte 2D."
-            );
+    grilleInput.addEventListener("change", async function ()
+    {
+        const file = grilleInput.files[0];
 
+        if (!file)
             return;
-        }
-
-
-        // ----------------------------------------------------
-        // Boutons
-        // ----------------------------------------------------
-
-        const openButton =
-            document.getElementById(
-                "openButton"
-            );
-
-
-        const openGrilleButton =
-            document.getElementById(
-                "openGrilleButton"
-            );
-
-
-        const clearButton =
-            document.getElementById(
-                "clearButton"
-            );
-
-
-        const imageInput =
-            document.getElementById(
-                "imageInput"
-            );
-
-
-        const grilleInput =
-            document.getElementById(
-                "grilleInput"
-            );
-
-
-        const tileSizeInput =
-            document.getElementById(
-                "tileSize"
-            );
-
-
-        if (openButton)
-        {
-            openButton.addEventListener(
-                "click",
-                function ()
-                {
-                    imageInput.click();
-                }
-            );
-        }
-
-
-        if (imageInput)
-        {
-            imageInput.addEventListener(
-                "change",
-                function (event)
-                {
-                    const file =
-                        event.target.files[0];
-
-
-                    if (file)
-                    {
-                        loadImageFile(
-                            file
-                        );
-                    }
-                }
-            );
-        }
-
-
-        if (openGrilleButton)
-        {
-            openGrilleButton.addEventListener(
-                "click",
-                function ()
-                {
-                    grilleInput.click();
-                }
-            );
-        }
-
-
-        if (grilleInput)
-        {
-            grilleInput.addEventListener(
-                "change",
-                async function (event)
-                {
-                    const file =
-                        event.target.files[0];
-
-
-                    if (!file)
-                    {
-                        return;
-                    }
-
-
-                    try
-                    {
-                        await loadGrilleFile(
-                            file
-                        );
-                    }
-                    catch (error)
-                    {
-                        console.error(
-                            "Erreur lecture grille :",
-                            error
-                        );
-
-
-                        alert(
-                            "Erreur lecture grille :\n" +
-                            error.message
-                        );
-                    }
-                }
-            );
-        }
-
-
-        if (clearButton)
-        {
-            clearButton.addEventListener(
-                "click",
-                clearSelection
-            );
-        }
-
-
-        if (tileSizeInput)
-        {
-            tileSizeInput.addEventListener(
-                "change",
-                function ()
-                {
-                    const value =
-                        parseInt(
-                            tileSizeInput.value,
-                            10
-                        );
-
-
-                    if (
-                        !Number.isFinite(value) ||
-                        value < 2
-                    )
-                    {
-                        return;
-                    }
-
-
-                    tileSize =
-                        value;
-
-
-                    recomputeGrid();
-
-
-                    draw();
-                }
-            );
-        }
-
-
-        // ----------------------------------------------------
-        // Pointer Events
-        //
-        // Souris Mac / trackpad.
-        // ----------------------------------------------------
-
-        canvas.addEventListener(
-            "pointerdown",
-            handlePointerDown,
-            {
-                passive: false
-            }
-        );
-
-
-        canvas.addEventListener(
-            "pointermove",
-            handlePointerMove,
-            {
-                passive: false
-            }
-        );
-
-
-        canvas.addEventListener(
-            "pointerup",
-            handlePointerUp,
-            {
-                passive: false
-            }
-        );
-
-
-        canvas.addEventListener(
-            "pointercancel",
-            handlePointerUp,
-            {
-                passive: false
-            }
-        );
-
-
-        // ----------------------------------------------------
-        // Touch Events
-        //
-        // Utilisés pour le tactile iPad / iPad Simulator.
-        // ----------------------------------------------------
-
-        canvas.addEventListener(
-            "touchstart",
-            handleTouchStart,
-            {
-                passive: false
-            }
-        );
-
-
-        canvas.addEventListener(
-            "touchmove",
-            handleTouchMove,
-            {
-                passive: false
-            }
-        );
-
-
-        canvas.addEventListener(
-            "touchend",
-            handleTouchEnd,
-            {
-                passive: false
-            }
-        );
-
-
-        canvas.addEventListener(
-            "touchcancel",
-            handleTouchEnd,
-            {
-                passive: false
-            }
-        );
-
-      
-
-        // ----------------------------------------------------
-        // Resize
-        // ----------------------------------------------------
-
-        window.addEventListener(
-            "resize",
-            function ()
-            {
-                draw();
-            }
-        );
-
-
-        // ----------------------------------------------------
-        // LZFSE
-        // ----------------------------------------------------
 
         try
         {
-            await initializeLZFSE();
+            await loadGrilleFile(file);
         }
         catch (error)
         {
-            console.error(
-                "LZFSE indisponible :",
-                error
+            console.error("Erreur chargement grille :", error);
+            alert("Impossible de charger la grille.");
+        }
+    });
+
+
+    // --------------------------------------------------------
+    // EFFACER
+    // --------------------------------------------------------
+
+    clearButton.addEventListener("click", function ()
+    {
+        clearSelection();
+    });
+
+
+    // --------------------------------------------------------
+    // TAILLE DES CASES
+    // --------------------------------------------------------
+
+    tileSizeInput.addEventListener("change", function ()
+    {
+        let value = parseInt(tileSizeInput.value, 10);
+
+        if (!Number.isFinite(value))
+            value = 20;
+
+        value = Math.max(2, Math.min(100, value));
+
+        tileSize = value;
+
+        tileSizeInput.value = value;
+
+        fitGridInWorkspace();
+
+        draw();
+    });
+
+
+    // --------------------------------------------------------
+    // POINTER EVENTS
+    // --------------------------------------------------------
+
+    canvas.addEventListener(
+        "pointerdown",
+        handlePointerDown,
+        { passive:false }
+    );
+
+    canvas.addEventListener(
+        "pointermove",
+        handlePointerMove,
+        { passive:false }
+    );
+
+    canvas.addEventListener(
+        "pointerup",
+        handlePointerUp,
+        { passive:false }
+    );
+
+    canvas.addEventListener(
+        "pointercancel",
+        handlePointerUp,
+        { passive:false }
+    );
+
+
+    // --------------------------------------------------------
+    // TOUCH EVENTS
+    // --------------------------------------------------------
+
+    canvas.addEventListener(
+        "touchstart",
+        handleTouchStart,
+        { passive:false }
+    );
+
+    canvas.addEventListener(
+        "touchmove",
+        handleTouchMove,
+        { passive:false }
+    );
+
+    canvas.addEventListener(
+        "touchend",
+        handleTouchEnd,
+        { passive:false }
+    );
+
+    canvas.addEventListener(
+        "touchcancel",
+        handleTouchEnd,
+        { passive:false }
+    );
+
+
+    // --------------------------------------------------------
+    // TRACKPAD MAC
+    // --------------------------------------------------------
+
+    canvas.addEventListener(
+        "wheel",
+        handleTrackpadWheel,
+        { passive:false }
+    );
+
+
+    // --------------------------------------------------------
+    // RESIZE
+    // --------------------------------------------------------
+
+    window.addEventListener("resize", function ()
+    {
+        resizeCanvasToWorkspace();
+        draw();
+    });
+
+
+    // --------------------------------------------------------
+    // INITIALISATION CANVAS
+    // --------------------------------------------------------
+
+    resizeCanvasToWorkspace();
+
+
+    // --------------------------------------------------------
+    // LZFSE
+    // --------------------------------------------------------
+
+    initLZFSE();
+});
+
+
+// ============================================================
+// REDIMENSIONNEMENT CANVAS
+// ============================================================
+
+function resizeCanvasToWorkspace()
+{
+    if (!canvas)
+        return;
+
+    const workspace =
+        document.getElementById("workspace");
+
+    if (!workspace)
+        return;
+
+    const rect = workspace.getBoundingClientRect();
+
+    const width =
+        Math.max(1, Math.floor(rect.width));
+
+    const height =
+        Math.max(1, Math.floor(rect.height));
+
+    canvas.width = width;
+    canvas.height = height;
+}
+
+
+// ============================================================
+// AJUSTEMENT INITIAL DE LA GRILLE
+// ============================================================
+
+function fitGridInWorkspace()
+{
+    if (!canvas || cols <= 0 || rows <= 0)
+        return;
+
+    const gridWidth =
+        cols * tileSize;
+
+    const gridHeight =
+        rows * tileSize;
+
+    const margin = 20;
+
+    const availableWidth =
+        canvas.width - margin * 2;
+
+    const availableHeight =
+        canvas.height - margin * 2;
+
+    if (availableWidth <= 0 || availableHeight <= 0)
+        return;
+
+    const scaleX =
+        availableWidth / gridWidth;
+
+    const scaleY =
+        availableHeight / gridHeight;
+
+    const scale =
+        Math.min(scaleX, scaleY);
+
+    zoomFactor =
+        Math.max(0.05, Math.min(10.0, scale));
+
+    panX =
+        (canvas.width - gridWidth * zoomFactor) / 2;
+
+    panY =
+        (canvas.height - gridHeight * zoomFactor) / 2;
+}
+
+
+// ============================================================
+// TRACKPAD MAC
+// ============================================================
+
+function handleTrackpadWheel(event)
+{
+    event.preventDefault();
+
+    const rect =
+        canvas.getBoundingClientRect();
+
+    const screenX =
+        event.clientX - rect.left;
+
+    const screenY =
+        event.clientY - rect.top;
+
+
+    // --------------------------------------------------------
+    // PINCH TRACKPAD
+    //
+    // Safari transforme généralement le pincement en wheel
+    // avec ctrlKey = true.
+    // --------------------------------------------------------
+
+    if (event.ctrlKey)
+    {
+        const worldX =
+            (screenX - panX) / zoomFactor;
+
+        const worldY =
+            (screenY - panY) / zoomFactor;
+
+        const factor =
+            Math.exp(-event.deltaY * 0.01);
+
+        let newZoom =
+            zoomFactor * factor;
+
+        newZoom =
+            Math.max(
+                0.05,
+                Math.min(10.0, newZoom)
+            );
+
+        panX =
+            screenX - worldX * newZoom;
+
+        panY =
+            screenY - worldY * newZoom;
+
+        zoomFactor = newZoom;
+
+        draw();
+
+        return;
+    }
+
+
+    // --------------------------------------------------------
+    // DEUX DOIGTS TRACKPAD = PAN
+    // --------------------------------------------------------
+
+    panX -= event.deltaX;
+    panY -= event.deltaY;
+
+    draw();
+}
+
+
+// ============================================================
+// POINTER DOWN
+// ============================================================
+
+function handlePointerDown(event)
+{
+    event.preventDefault();
+
+    if (event.pointerType === "mouse")
+        return;
+
+    canvas.setPointerCapture(event.pointerId);
+
+    activePointers.set(
+        event.pointerId,
+        {
+            x: event.clientX,
+            y: event.clientY
+        }
+    );
+
+    if (activePointers.size === 1)
+    {
+        const rect =
+            canvas.getBoundingClientRect();
+
+        const screenX =
+            event.clientX - rect.left;
+
+        const screenY =
+            event.clientY - rect.top;
+
+        lastPointerWorldX =
+            (screenX - panX) / zoomFactor;
+
+        lastPointerWorldY =
+            (screenY - panY) / zoomFactor;
+
+        singlePointer =
+            event.pointerId;
+
+        singlePointerMoved = false;
+
+        touchInteractionActive = true;
+    }
+    else if (activePointers.size === 2)
+    {
+        setupPinch();
+    }
+}
+
+
+// ============================================================
+// POINTER MOVE
+// ============================================================
+
+function handlePointerMove(event)
+{
+    if (event.pointerType === "mouse")
+        return;
+
+    if (!activePointers.has(event.pointerId))
+        return;
+
+    event.preventDefault();
+
+    activePointers.set(
+        event.pointerId,
+        {
+            x: event.clientX,
+            y: event.clientY
+        }
+    );
+
+
+    if (activePointers.size === 1)
+    {
+        const rect =
+            canvas.getBoundingClientRect();
+
+        const screenX =
+            event.clientX - rect.left;
+
+        const screenY =
+            event.clientY - rect.top;
+
+        const worldX =
+            (screenX - panX) / zoomFactor;
+
+        const worldY =
+            (screenY - panY) / zoomFactor;
+
+        const dx =
+            worldX - lastPointerWorldX;
+
+        const dy =
+            worldY - lastPointerWorldY;
+
+        if (Math.abs(dx) > 1 || Math.abs(dy) > 1)
+            singlePointerMoved = true;
+
+        panX += dx * zoomFactor;
+        panY += dy * zoomFactor;
+
+        lastPointerWorldX = worldX;
+        lastPointerWorldY = worldY;
+
+        draw();
+    }
+    else if (activePointers.size === 2)
+    {
+        handlePinchMove();
+    }
+}
+
+
+// ============================================================
+// POINTER UP
+// ============================================================
+
+function handlePointerUp(event)
+{
+    if (event.pointerType === "mouse")
+        return;
+
+    event.preventDefault();
+
+    activePointers.delete(event.pointerId);
+
+    if (activePointers.size === 0)
+    {
+        touchInteractionActive = false;
+
+        if (
+            singlePointer === event.pointerId &&
+            !singlePointerMoved
+        )
+        {
+            const rect =
+                canvas.getBoundingClientRect();
+
+            const screenX =
+                event.clientX - rect.left;
+
+            const screenY =
+                event.clientY - rect.top;
+
+            toggleTileAtScreen(
+                screenX,
+                screenY
+            );
+        }
+
+        singlePointer = null;
+    }
+    else if (activePointers.size === 1)
+    {
+        const remaining =
+            activePointers.values().next().value;
+
+        const rect =
+            canvas.getBoundingClientRect();
+
+        const screenX =
+            remaining.x - rect.left;
+
+        const screenY =
+            remaining.y - rect.top;
+
+        lastPointerWorldX =
+            (screenX - panX) / zoomFactor;
+
+        lastPointerWorldY =
+            (screenY - panY) / zoomFactor;
+
+        singlePointer =
+            [...activePointers.keys()][0];
+
+        singlePointerMoved = true;
+    }
+}
+
+
+// ============================================================
+// INITIALISATION PINCH
+// ============================================================
+
+function setupPinch()
+{
+    const points =
+        [...activePointers.values()];
+
+    if (points.length !== 2)
+        return;
+
+    const p1 = points[0];
+    const p2 = points[1];
+
+    lastPinchDistance =
+        Math.hypot(
+            p2.x - p1.x,
+            p2.y - p1.y
+        );
+
+    lastPinchCenterX =
+        (p1.x + p2.x) / 2;
+
+    lastPinchCenterY =
+        (p1.y + p2.y) / 2;
+}
+
+
+// ============================================================
+// MOUVEMENT PINCH
+// ============================================================
+
+function handlePinchMove()
+{
+    const points =
+        [...activePointers.values()];
+
+    if (points.length !== 2)
+        return;
+
+    const p1 = points[0];
+    const p2 = points[1];
+
+
+    const distance =
+        Math.hypot(
+            p2.x - p1.x,
+            p2.y - p1.y
+        );
+
+    if (lastPinchDistance <= 0)
+    {
+        setupPinch();
+        return;
+    }
+
+
+    const centerX =
+        (p1.x + p2.x) / 2 -
+        canvas.getBoundingClientRect().left;
+
+    const centerY =
+        (p1.y + p2.y) / 2 -
+        canvas.getBoundingClientRect().top;
+
+
+    const oldCenterX =
+        lastPinchCenterX -
+        canvas.getBoundingClientRect().left;
+
+    const oldCenterY =
+        lastPinchCenterY -
+        canvas.getBoundingClientRect().top;
+
+
+    // --------------------------------------------------------
+    // POINT DU MONDE QUI SE TROUVAIT SOUS L'ANCIEN CENTRE
+    // --------------------------------------------------------
+
+    const worldX =
+        (oldCenterX - panX) / zoomFactor;
+
+    const worldY =
+        (oldCenterY - panY) / zoomFactor;
+
+
+    // --------------------------------------------------------
+    // ZOOM
+    // --------------------------------------------------------
+
+    const ratio =
+        distance / lastPinchDistance;
+
+    let newZoom =
+        zoomFactor * ratio;
+
+    newZoom =
+        Math.max(
+            0.05,
+            Math.min(10.0, newZoom)
+        );
+
+
+    // --------------------------------------------------------
+    // NOUVEAU PAN
+    //
+    // Le même point monde reste sous le nouveau centre.
+    // Cela permet de faire simultanément :
+    //   - zoom
+    //   - déplacement à deux doigts
+    // --------------------------------------------------------
+
+    panX =
+        centerX - worldX * newZoom;
+
+    panY =
+        centerY - worldY * newZoom;
+
+    zoomFactor = newZoom;
+
+
+    lastPinchDistance = distance;
+
+    lastPinchCenterX =
+        (p1.x + p2.x) / 2;
+
+    lastPinchCenterY =
+        (p1.y + p2.y) / 2;
+
+
+    draw();
+}
+
+
+// ============================================================
+// TOUCH START
+// ============================================================
+
+function handleTouchStart(event)
+{
+    event.preventDefault();
+
+    touchInteractionActive = true;
+
+    if (event.touches.length === 2)
+    {
+        const t1 = event.touches[0];
+        const t2 = event.touches[1];
+
+        lastPinchDistance =
+            Math.hypot(
+                t2.clientX - t1.clientX,
+                t2.clientY - t1.clientY
+            );
+
+        lastPinchCenterX =
+            (t1.clientX + t2.clientX) / 2;
+
+        lastPinchCenterY =
+            (t1.clientY + t2.clientY) / 2;
+    }
+}
+
+
+// ============================================================
+// TOUCH MOVE
+// ============================================================
+
+function handleTouchMove(event)
+{
+    event.preventDefault();
+
+    if (event.touches.length !== 2)
+        return;
+
+
+    const rect =
+        canvas.getBoundingClientRect();
+
+
+    const t1 = event.touches[0];
+    const t2 = event.touches[1];
+
+
+    const distance =
+        Math.hypot(
+            t2.clientX - t1.clientX,
+            t2.clientY - t1.clientY
+        );
+
+
+    if (lastPinchDistance <= 0)
+    {
+        lastPinchDistance = distance;
+
+        lastPinchCenterX =
+            (t1.clientX + t2.clientX) / 2;
+
+        lastPinchCenterY =
+            (t1.clientY + t2.clientY) / 2;
+
+        return;
+    }
+
+
+    const centerX =
+        (t1.clientX + t2.clientX) / 2 -
+        rect.left;
+
+    const centerY =
+        (t1.clientY + t2.clientY) / 2 -
+        rect.top;
+
+
+    const oldCenterX =
+        lastPinchCenterX -
+        rect.left;
+
+    const oldCenterY =
+        lastPinchCenterY -
+        rect.top;
+
+
+    // --------------------------------------------------------
+    // POINT MONDE SOUS L'ANCIEN CENTRE
+    // --------------------------------------------------------
+
+    const worldX =
+        (oldCenterX - panX) / zoomFactor;
+
+    const worldY =
+        (oldCenterY - panY) / zoomFactor;
+
+
+    // --------------------------------------------------------
+    // NOUVEAU ZOOM
+    // --------------------------------------------------------
+
+    const ratio =
+        distance / lastPinchDistance;
+
+    let newZoom =
+        zoomFactor * ratio;
+
+    newZoom =
+        Math.max(
+            0.05,
+            Math.min(10.0, newZoom)
+        );
+
+
+    // --------------------------------------------------------
+    // PAN + ZOOM
+    // --------------------------------------------------------
+
+    panX =
+        centerX - worldX * newZoom;
+
+    panY =
+        centerY - worldY * newZoom;
+
+    zoomFactor = newZoom;
+
+
+    lastPinchDistance = distance;
+
+    lastPinchCenterX =
+        (t1.clientX + t2.clientX) / 2;
+
+    lastPinchCenterY =
+        (t1.clientY + t2.clientY) / 2;
+
+
+    draw();
+}
+
+
+// ============================================================
+// TOUCH END
+// ============================================================
+
+function handleTouchEnd(event)
+{
+    event.preventDefault();
+
+    if (event.touches.length < 2)
+    {
+        lastPinchDistance = 0;
+    }
+
+    if (event.touches.length === 0)
+    {
+        touchInteractionActive = false;
+    }
+}
+
+
+// ============================================================
+// CLIC SUR UNE CASE
+// ============================================================
+
+function toggleTileAtScreen(screenX, screenY)
+{
+    if (cols <= 0 || rows <= 0)
+        return;
+
+    const worldX =
+        (screenX - panX) / zoomFactor;
+
+    const worldY =
+        (screenY - panY) / zoomFactor;
+
+
+    const col =
+        Math.floor(worldX / tileSize);
+
+    const row =
+        Math.floor(worldY / tileSize);
+
+
+    if (
+        col < 0 ||
+        col >= cols ||
+        row < 0 ||
+        row >= rows
+    )
+    {
+        return;
+    }
+
+
+    const index =
+        row * cols + col;
+
+
+    if (selectedTiles.has(index))
+        selectedTiles.delete(index);
+    else
+        selectedTiles.add(index);
+
+
+    draw();
+}
+
+
+// ============================================================
+// DESSIN
+// ============================================================
+
+function draw()
+{
+    if (!ctx || !canvas)
+        return;
+
+
+    ctx.clearRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+
+    // --------------------------------------------------------
+    // FOND
+    // --------------------------------------------------------
+
+    ctx.fillStyle = "#303030";
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+
+    if (!sourceImage)
+        return;
+
+
+    // --------------------------------------------------------
+    // IMAGE
+    // --------------------------------------------------------
+
+    const imageWidth =
+        sourceImage.naturalWidth ||
+        sourceImage.width;
+
+    const imageHeight =
+        sourceImage.naturalHeight ||
+        sourceImage.height;
+
+
+    if (cols <= 0 || rows <= 0)
+    {
+        ctx.save();
+
+        ctx.translate(panX, panY);
+
+        ctx.scale(
+            zoomFactor,
+            zoomFactor
+        );
+
+        ctx.drawImage(
+            sourceImage,
+            0,
+            0
+        );
+
+        ctx.restore();
+
+        return;
+    }
+
+
+    // --------------------------------------------------------
+    // IMAGE
+    // --------------------------------------------------------
+
+    ctx.save();
+
+    ctx.translate(
+        panX,
+        panY
+    );
+
+    ctx.scale(
+        zoomFactor,
+        zoomFactor
+    );
+
+
+    ctx.imageSmoothingEnabled = true;
+
+    ctx.drawImage(
+        sourceImage,
+        0,
+        0,
+        cols * tileSize,
+        rows * tileSize
+    );
+
+
+    // --------------------------------------------------------
+    // CASES SELECTIONNEES
+    // --------------------------------------------------------
+
+    if (selectedTiles.size > 0)
+    {
+        ctx.fillStyle =
+            "rgba(255,255,255,0.35)";
+
+        for (const index of selectedTiles)
+        {
+            const row =
+                Math.floor(index / cols);
+
+            const col =
+                index % cols;
+
+            ctx.fillRect(
+                col * tileSize,
+                row * tileSize,
+                tileSize,
+                tileSize
             );
         }
     }
-);
+
+
+    // --------------------------------------------------------
+    // GRILLE
+    // --------------------------------------------------------
+
+    if (tileSize * zoomFactor >= 4)
+    {
+        ctx.beginPath();
+
+        for (let x = 0; x <= cols; x++)
+        {
+            const px =
+                x * tileSize;
+
+            ctx.moveTo(
+                px,
+                0
+            );
+
+            ctx.lineTo(
+                px,
+                rows * tileSize
+            );
+        }
+
+        for (let y = 0; y <= rows; y++)
+        {
+            const py =
+                y * tileSize;
+
+            ctx.moveTo(
+                0,
+                py
+            );
+
+            ctx.lineTo(
+                cols * tileSize,
+                py
+            );
+        }
+
+        ctx.strokeStyle =
+            "rgba(0,0,0,0.25)";
+
+        ctx.lineWidth =
+            1 / zoomFactor;
+
+        ctx.stroke();
+    }
+
+
+    ctx.restore();
+}
+
+
+// ============================================================
+// CHARGEMENT IMAGE
+// ============================================================
+
+function loadImageFile(file)
+{
+    const url =
+        URL.createObjectURL(file);
+
+    const image =
+        new Image();
+
+    image.onload = function ()
+    {
+        sourceImage = image;
+
+        cols = Math.floor(
+            image.naturalWidth / tileSize
+        );
+
+        rows = Math.floor(
+            image.naturalHeight / tileSize
+        );
+
+        selectedTiles.clear();
+
+        fitGridInWorkspace();
+
+        updateInfo();
+
+        draw();
+
+        URL.revokeObjectURL(url);
+    };
+
+    image.onerror = function ()
+    {
+        console.error(
+            "Impossible de charger l'image."
+        );
+
+        URL.revokeObjectURL(url);
+    };
+
+    image.src = url;
+}
 
 
 // ============================================================
 // LZFSE
 // ============================================================
 
-async function initializeLZFSE()
+async function initLZFSE()
 {
-    console.log(
-        "Chargement du module LZFSE..."
-    );
-
-
     try
     {
-        const module =
+        console.log("Chargement du module LZFSE...");
+
+        lzfseModule =
             await createLZFSEModule();
-
-
-        console.log(
-            "Module LZFSE créé :",
-            module
-        );
-
 
         console.log(
             "decode_lzfse_memfs :",
-            typeof module._decode_lzfse_memfs
+            typeof lzfseModule._decode_lzfse_memfs
         );
 
-
-        if (
-            typeof module._decode_lzfse_memfs !==
-            "function"
-        )
+        if (!lzfseModule.FS)
         {
             throw new Error(
-                "_decode_lzfse_memfs n'est pas disponible."
+                "FS Emscripten indisponible."
             );
         }
 
-
-        if (!module.FS)
-        {
-            throw new Error(
-                "Le système de fichiers MEMFS n'est pas disponible."
-            );
-        }
-
-
-        lzfseModule =
-            module;
-
-
-        console.log(
-            "LZFSE prêt"
-        );
+        console.log("LZFSE prêt");
     }
     catch (error)
     {
         console.error(
-            "ERREUR INITIALISATION LZFSE :",
+            "Erreur initialisation LZFSE :",
             error
         );
-
-
-        throw error;
     }
 }
 
 
-async function decompressLZFSE(
-    compressed,
-    originalSize
-)
+// ============================================================
+// CHARGEMENT GRILLE
+// ============================================================
+
+async function loadGrilleFile(file)
 {
     if (!lzfseModule)
     {
         throw new Error(
-            "Le module LZFSE n'est pas prêt."
+            "LZFSE n'est pas encore prêt."
         );
+    }
+
+
+    const buffer =
+        await file.arrayBuffer();
+
+    const bytes =
+        new Uint8Array(buffer);
+
+
+    if (bytes.length < 8)
+    {
+        throw new Error(
+            "Fichier grille trop court."
+        );
+    }
+
+
+    // --------------------------------------------------------
+    // 8 PREMIERS OCTETS = TAILLE DECOMPRIMEE
+    // --------------------------------------------------------
+
+    const view =
+        new DataView(buffer);
+
+    const expectedSize =
+        Number(
+            view.getBigUint64(
+                0,
+                true
+            )
+        );
+
+
+    console.log(
+        "Taille originale annoncée :",
+        expectedSize
+    );
+
+
+    const compressed =
+        bytes.subarray(8);
+
+
+    console.log(
+        "Taille LZFSE :",
+        compressed.length
+    );
+
+
+    console.log(
+        "Signature LZFSE :",
+        new TextDecoder().decode(
+            compressed.subarray(0, 4)
+        )
+    );
+
+
+    // --------------------------------------------------------
+    // MEMFS
+    // --------------------------------------------------------
+
+    try
+    {
+        lzfseModule.FS.unlink(
+            "/grille_input.lzfse"
+        );
+    }
+    catch (e)
+    {
+        // Fichier absent : normal.
+    }
+
+
+    try
+    {
+        lzfseModule.FS.unlink(
+            "/grille_output.bin"
+        );
+    }
+    catch (e)
+    {
+        // Fichier absent : normal.
     }
 
 
@@ -478,93 +1292,41 @@ async function decompressLZFSE(
     );
 
 
-    console.log(
-        "Compressed :",
-        compressed.length
-    );
-
-
-    console.log(
-        "Expected :",
-        originalSize
-    );
-
-
-    const inputPath =
-        "/grille_input.lzfse";
-
-
-    const outputPath =
-        "/grille_output.bin";
-
-
-    try
-    {
-        lzfseModule.FS.unlink(
-            inputPath
-        );
-    }
-    catch (e)
-    {
-    }
-
-
-    try
-    {
-        lzfseModule.FS.unlink(
-            outputPath
-        );
-    }
-    catch (e)
-    {
-    }
-
-
-    console.log(
-        "Copie des données LZFSE dans MEMFS..."
-    );
-
-
     lzfseModule.FS.writeFile(
-        inputPath,
+        "/grille_input.lzfse",
         compressed
     );
 
 
     console.log(
         "Fichier MEMFS créé :",
-        inputPath
+        "/grille_input.lzfse"
     );
 
 
-    console.log(
-        "Appel decode_lzfse_memfs..."
-    );
-
-
-    const decodedSize =
+    const result =
         lzfseModule._decode_lzfse_memfs(
-            originalSize
+            expectedSize
         );
 
 
     console.log(
-        "Taille décompressée :",
-        decodedSize
+        "Résultat decode_lzfse_memfs :",
+        result
     );
 
 
-    if (decodedSize <= 0)
+    if (!result)
     {
         throw new Error(
-            "Échec de la décompression LZFSE."
+            "La décompression LZFSE a échoué."
         );
     }
 
 
     const decoded =
         lzfseModule.FS.readFile(
-            outputPath
+            "/grille_output.bin"
         );
 
 
@@ -575,30 +1337,269 @@ async function decompressLZFSE(
     );
 
 
-    try
+    // --------------------------------------------------------
+    // NSKEYEDARCHIVER
+    // --------------------------------------------------------
+
+    const archive =
+        decodeBinaryPlist(decoded);
+
+    const root =
+        decodeGrilleArchive(archive);
+
+
+    console.log(
+        "OBJET RACINE NSKEYEDARCHIVER :",
+        root
+    );
+
+
+    const data =
+        extractGrilleData(root);
+
+
+    if (!data)
     {
-        lzfseModule.FS.unlink(
-            inputPath
+        throw new Error(
+            "Impossible d'extraire les données de la grille."
         );
     }
-    catch (e)
+
+
+    // --------------------------------------------------------
+    // PNG GRILLE
+    // --------------------------------------------------------
+
+    console.log(
+        "GRILLE : PNG Uint8Array length",
+        data.GRILLE?.length
+    );
+
+    console.log(
+        "COULEUR : PNG Uint8Array length",
+        data.COULEUR?.length
+    );
+
+    console.log(
+        "PALETTE : PNG Uint8Array length",
+        data.PALETTE?.length
+    );
+
+    console.log(
+        "ENCOURS :",
+        data.ENCOURS
+    );
+
+    console.log(
+        "TILESIZE :",
+        data.TILESIZE
+    );
+
+    console.log(
+        "TILEORIGIN :",
+        data.TILEORIGIN
+    );
+
+
+    // --------------------------------------------------------
+    // TILE SIZE
+    //
+    // Mac stocke ici 10.
+    // L'iPad utilise 20.
+    // --------------------------------------------------------
+
+    if (
+        typeof data.TILESIZE === "number" &&
+        data.TILESIZE > 0
+    )
     {
+        tileSize =
+            data.TILESIZE * 2;
+
+        const input =
+            document.getElementById("tileSize");
+
+        if (input)
+            input.value = tileSize;
     }
 
 
-    try
-    {
-        lzfseModule.FS.unlink(
-            outputPath
+    // --------------------------------------------------------
+    // CHARGEMENT IMAGE GRILLE
+    // --------------------------------------------------------
+
+    sourceImage =
+        await imageFromPNGData(
+            data.GRILLE
         );
-    }
-    catch (e)
+
+
+    if (data.COULEUR)
     {
+        colorImage =
+            await imageFromPNGData(
+                data.COULEUR
+            );
     }
 
 
-    return new Uint8Array(
-        decoded
+    if (data.PALETTE)
+    {
+        paletteImage =
+            await imageFromPNGData(
+                data.PALETTE
+            );
+    }
+
+
+    // --------------------------------------------------------
+    // DIMENSIONS
+    // --------------------------------------------------------
+
+    cols =
+        Math.floor(
+            sourceImage.naturalWidth / tileSize
+        );
+
+    rows =
+        Math.floor(
+            sourceImage.naturalHeight / tileSize
+        );
+
+
+    // --------------------------------------------------------
+    // INDEX SELECTIONNES
+    // --------------------------------------------------------
+
+    selectedTiles =
+        decodeNSIndexSet(
+            data.ENCOURS
+        );
+
+
+    console.log(
+        "selectedTiles.size =",
+        selectedTiles.size
+    );
+
+
+    // --------------------------------------------------------
+    // CONVENTION TILEORIGIN
+    //
+    // TILEORIGIN = 1 :
+    // index directement utilisable.
+    //
+    // Ancien fichier :
+    // index Mac avec origine bas-gauche.
+    // --------------------------------------------------------
+
+    if (data.TILEORIGIN !== 1)
+    {
+        const converted =
+            new Set();
+
+        for (const macIndex of selectedTiles)
+        {
+            const macRow =
+                Math.floor(
+                    macIndex / cols
+                );
+
+            const col =
+                macIndex % cols;
+
+            const ipadRow =
+                rows - 1 - macRow;
+
+            const ipadIndex =
+                ipadRow * cols + col;
+
+            if (
+                ipadIndex >= 0 &&
+                ipadIndex < cols * rows
+            )
+            {
+                converted.add(
+                    ipadIndex
+                );
+            }
+        }
+
+        selectedTiles =
+            converted;
+    }
+
+
+    fitGridInWorkspace();
+
+    updateInfo();
+
+    draw();
+}
+
+
+// ============================================================
+// IMAGE PNG A PARTIR DE UINT8ARRAY
+// ============================================================
+
+function imageFromPNGData(data)
+{
+    return new Promise(
+        function (resolve, reject)
+        {
+            if (!(data instanceof Uint8Array))
+            {
+                reject(
+                    new Error(
+                        "Données PNG invalides."
+                    )
+                );
+
+                return;
+            }
+
+
+            const blob =
+                new Blob(
+                    [data],
+                    {
+                        type:"image/png"
+                    }
+                );
+
+
+            const url =
+                URL.createObjectURL(blob);
+
+
+            const image =
+                new Image();
+
+
+            image.onload =
+                function ()
+                {
+                    URL.revokeObjectURL(url);
+
+                    resolve(image);
+                };
+
+
+            image.onerror =
+                function ()
+                {
+                    URL.revokeObjectURL(url);
+
+                    reject(
+                        new Error(
+                            "Impossible de décoder le PNG."
+                        )
+                    );
+                };
+
+
+            image.src = url;
+        }
     );
 }
 
@@ -607,77 +1608,47 @@ async function decompressLZFSE(
 // BINARY PLIST
 // ============================================================
 
+function decodeBinaryPlist(bytes)
+{
+    const decoder =
+        new BinaryPlistDecoder(bytes);
+
+    return decoder.decode();
+}
+
+
+// ============================================================
+// DECODEUR BINARY PLIST
+// ============================================================
+
 class BinaryPlistDecoder
 {
     constructor(bytes)
     {
         this.bytes = bytes;
+        this.view = new DataView(
+            bytes.buffer,
+            bytes.byteOffset,
+            bytes.byteLength
+        );
 
-        this.objects = [];
-        this.offsets = [];
-
-        this.objectRefSize = 0;
         this.offsetIntSize = 0;
+        this.objectRefSize = 0;
         this.numObjects = 0;
         this.topObject = 0;
         this.offsetTableOffset = 0;
-    }
 
+        this.offsets = [];
 
-    readUIntBE(
-        offset,
-        size
-    )
-    {
-        let value = 0;
-
-
-        for (
-            let i = 0;
-            i < size;
-            i++
-        )
-        {
-            value =
-                value * 256 +
-                this.bytes[
-                    offset + i
-                ];
-        }
-
-
-        return value;
-    }
-
-
-    readDoubleBE(
-        offset
-    )
-    {
-        const buffer =
-            this.bytes.buffer.slice(
-                this.bytes.byteOffset +
-                offset,
-                this.bytes.byteOffset +
-                offset +
-                8
-            );
-
-
-        return new DataView(
-            buffer
-        ).getFloat64(
-            0,
-            false
-        );
+        this.cache = new Map();
     }
 
 
     decode()
     {
-        if (
-            this.bytes.length < 40
-        )
+        const bytes = this.bytes;
+
+        if (bytes.length < 40)
         {
             throw new Error(
                 "Binary plist trop court."
@@ -685,93 +1656,85 @@ class BinaryPlistDecoder
         }
 
 
-        const magic =
-            String.fromCharCode(
-                this.bytes[0],
-                this.bytes[1],
-                this.bytes[2],
-                this.bytes[3],
-                this.bytes[4],
-                this.bytes[5],
-                this.bytes[6],
-                this.bytes[7]
+        const signature =
+            new TextDecoder().decode(
+                bytes.subarray(0, 8)
             );
 
 
-        if (magic !== "bplist00")
+        if (signature !== "bplist00")
         {
             throw new Error(
-                "Ce fichier n'est pas un binary plist."
+                "Signature bplist00 absente."
             );
         }
 
 
-        const trailer =
-            this.bytes.length - 32;
+        const trailerOffset =
+            bytes.length - 32;
 
 
         this.offsetIntSize =
-            this.bytes[
-                trailer + 6
-            ];
-
+            bytes[trailerOffset + 6];
 
         this.objectRefSize =
-            this.bytes[
-                trailer + 7
-            ];
+            bytes[trailerOffset + 7];
 
 
         this.numObjects =
-            this.readUIntBE(
-                trailer + 8,
-                8
+            Number(
+                readUIntBE(
+                    bytes,
+                    trailerOffset + 8,
+                    8
+                )
             );
 
 
         this.topObject =
-            this.readUIntBE(
-                trailer + 16,
-                8
+            Number(
+                readUIntBE(
+                    bytes,
+                    trailerOffset + 16,
+                    8
+                )
             );
 
 
         this.offsetTableOffset =
-            this.readUIntBE(
-                trailer + 24,
-                8
+            Number(
+                readUIntBE(
+                    bytes,
+                    trailerOffset + 24,
+                    8
+                )
             );
 
 
         console.log(
-            "Binary plist :",
-            {
-                offsetIntSize:
-                    this.offsetIntSize,
-
-                objectRefSize:
-                    this.objectRefSize,
-
-                numObjects:
-                    this.numObjects,
-
-                topObject:
-                    this.topObject,
-
-                offsetTableOffset:
-                    this.offsetTableOffset
-            }
+            "offsetIntSize:",
+            this.offsetIntSize
         );
 
+        console.log(
+            "objectRefSize:",
+            this.objectRefSize
+        );
 
-        // ----------------------------------------------------
-        // Offsets
-        // ----------------------------------------------------
+        console.log(
+            "numObjects:",
+            this.numObjects
+        );
 
-        this.offsets =
-            new Array(
-                this.numObjects
-            );
+        console.log(
+            "topObject:",
+            this.topObject
+        );
+
+        console.log(
+            "offsetTableOffset:",
+            this.offsetTableOffset
+        );
 
 
         for (
@@ -780,25 +1743,18 @@ class BinaryPlistDecoder
             i++
         )
         {
-            this.offsets[i] =
-                this.readUIntBE(
-                    this.offsetTableOffset +
-                    i *
-                    this.offsetIntSize,
-
-                    this.offsetIntSize
+            const offset =
+                Number(
+                    readUIntBE(
+                        bytes,
+                        this.offsetTableOffset +
+                        i * this.offsetIntSize,
+                        this.offsetIntSize
+                    )
                 );
+
+            this.offsets.push(offset);
         }
-
-
-        // ----------------------------------------------------
-        // Objets
-        // ----------------------------------------------------
-
-        this.objects =
-            new Array(
-                this.numObjects
-            );
 
 
         return this.decodeObject(
@@ -807,31 +1763,16 @@ class BinaryPlistDecoder
     }
 
 
-    decodeObject(ref)
+    decodeObject(index)
     {
-        if (
-            ref < 0 ||
-            ref >= this.numObjects
-        )
+        if (this.cache.has(index))
         {
-            throw new Error(
-                "Référence objet invalide : " +
-                ref
-            );
-        }
-
-
-        if (
-            this.objects[ref] !== undefined
-        )
-        {
-            return this.objects[ref];
+            return this.cache.get(index);
         }
 
 
         const offset =
-            this.offsets[ref];
-
+            this.offsets[index];
 
         const marker =
             this.bytes[offset];
@@ -840,716 +1781,94 @@ class BinaryPlistDecoder
         const type =
             marker >> 4;
 
-
         const info =
-            marker & 0x0F;
-
-
-        let value;
-
-
-        switch (type)
-        {
-            case 0x0:
-
-                value =
-                    this.decodeSimple(
-                        info
-                    );
-
-                break;
-
-
-            case 0x1:
-
-                value =
-                    this.decodeInteger(
-                        info,
-                        offset
-                    );
-
-                break;
-
-
-            case 0x2:
-
-                value =
-                    this.decodeReal(
-                        info,
-                        offset
-                    );
-
-                break;
-
-
-            case 0x3:
-
-                value =
-                    this.decodeDate(
-                        info,
-                        offset
-                    );
-
-                break;
-
-
-            case 0x4:
-
-                value =
-                    this.decodeData(
-                        info,
-                        offset
-                    );
-
-                break;
-
-
-            case 0x5:
-
-                value =
-                    this.decodeASCII(
-                        info,
-                        offset
-                    );
-
-                break;
-
-
-            case 0x6:
-
-                value =
-                    this.decodeUTF16(
-                        info,
-                        offset
-                    );
-
-                break;
-
-
-            case 0x8:
-
-                value =
-                    this.decodeUID(
-                        info,
-                        offset
-                    );
-
-                break;
-
-
-            case 0xA:
-
-                value =
-                    this.decodeArray(
-                        info,
-                        offset
-                    );
-
-                break;
-
-
-            case 0xD:
-
-                value =
-                    this.decodeDictionary(
-                        info,
-                        offset
-                    );
-
-                break;
-
-
-            default:
-
-                throw new Error(
-                    "Type plist inconnu : 0x" +
-                    type.toString(16)
-                );
-        }
-
-
-        this.objects[ref] =
-            value;
-
-
-        return value;
-    }
-
-
-    decodeLength(
-        info,
-        offset
-    )
-    {
-        if (
-            info < 0x0F
-        )
-        {
-            return {
-                length: info,
-                offset: offset + 1
-            };
-        }
-
-
-        const marker =
-            this.bytes[
-                offset + 1
-            ];
-
-
-        const type =
-            marker >> 4;
-
-
-        const integerInfo =
-            marker & 0x0F;
-
-
-        if (type !== 0x1)
-        {
-            throw new Error(
-                "Longueur plist invalide."
-            );
-        }
-
-
-        const byteCount =
-            1 << integerInfo;
-
-
-        const length =
-            this.readUIntBE(
-                offset + 2,
-                byteCount
-            );
-
-
-        return {
-            length: length,
-
-            offset:
-                offset +
-                2 +
-                byteCount
-        };
-    }
-
-
-    decodeSimple(info)
-    {
-        switch (info)
-        {
-            case 0x0:
-                return null;
-
-            case 0x8:
-                return false;
-
-            case 0x9:
-                return true;
-
-            default:
-
-                return {
-                    plistSimple: info
-                };
-        }
-    }
-
-
-    decodeInteger(
-        info,
-        offset
-    )
-    {
-        const byteCount =
-            1 << info;
-
-
-        return this.readUIntBE(
-            offset + 1,
-            byteCount
-        );
-    }
-
-
-    decodeReal(
-        info,
-        offset
-    )
-    {
-        const byteCount =
-            1 << info;
-
-
-        if (byteCount === 4)
-        {
-            const buffer =
-                this.bytes.buffer.slice(
-                    this.bytes.byteOffset +
-                    offset + 1,
-
-                    this.bytes.byteOffset +
-                    offset + 5
-                );
-
-
-            return new DataView(
-                buffer
-            ).getFloat32(
-                0,
-                false
-            );
-        }
-
-
-        if (byteCount === 8)
-        {
-            return this.readDoubleBE(
-                offset + 1
-            );
-        }
-
-
-        throw new Error(
-            "REAL plist non supporté."
-        );
-    }
-
-
-    decodeDate(
-        info,
-        offset
-    )
-    {
-        if (info !== 0x3)
-        {
-            throw new Error(
-                "DATE plist invalide."
-            );
-        }
-
-
-        return this.readDoubleBE(
-            offset + 1
-        );
-    }
-
-
-    decodeData(
-        info,
-        offset
-    )
-    {
-        const result =
-            this.decodeLength(
-                info,
-                offset
-            );
-
-
-        return this.bytes.slice(
-            result.offset,
-            result.offset +
-            result.length
-        );
-    }
-
-
-    decodeASCII(
-        info,
-        offset
-    )
-    {
-        const result =
-            this.decodeLength(
-                info,
-                offset
-            );
-
-
-        let text = "";
-
-
-        for (
-            let i = 0;
-            i < result.length;
-            i++
-        )
-        {
-            text += String.fromCharCode(
-                this.bytes[
-                    result.offset + i
-                ]
-            );
-        }
-
-
-        return text;
-    }
-
-
-    decodeUTF16(
-        info,
-        offset
-    )
-    {
-        const result =
-            this.decodeLength(
-                info,
-                offset
-            );
-
-
-        let text = "";
-
-
-        for (
-            let i = 0;
-            i < result.length;
-            i++
-        )
-        {
-            const p =
-                result.offset +
-                i * 2;
-
-
-            const code =
-                (this.bytes[p] << 8) |
-                this.bytes[p + 1];
-
-
-            text += String.fromCharCode(
-                code
-            );
-        }
-
-
-        return text;
-    }
-
-
-    decodeUID(
-        info,
-        offset
-    )
-    {
-        const length =
-            info + 1;
-
-
-        let value = 0;
-
-
-        for (
-            let i = 0;
-            i < length;
-            i++
-        )
-        {
-            value =
-                value * 256 +
-                this.bytes[
-                    offset + 1 + i
-                ];
-        }
-
-
-        return {
-            uid: value
-        };
-    }
-
-
-    decodeArray(
-        info,
-        offset
-    )
-    {
-        const result =
-            this.decodeLength(
-                info,
-                offset
-            );
-
-
-        let pos =
-            result.offset;
-
-
-        const array =
-            new Array(
-                result.length
-            );
-
-
-        for (
-            let i = 0;
-            i < result.length;
-            i++
-        )
-        {
-            const ref =
-                this.readUIntBE(
-                    pos,
-                    this.objectRefSize
-                );
-
-
-            pos +=
-                this.objectRefSize;
-
-
-            array[i] =
-                this.decodeObject(
-                    ref
-                );
-        }
-
-
-        return array;
-    }
-
-
-    decodeDictionary(
-        info,
-        offset
-    )
-    {
-        const result =
-            this.decodeLength(
-                info,
-                offset
-            );
-
-
-        const count =
-            result.length;
-
-
-        let pos =
-            result.offset;
-
-
-        const keyRefs =
-            new Array(
-                count
-            );
-
-
-        const valueRefs =
-            new Array(
-                count
-            );
-
-
-        for (
-            let i = 0;
-            i < count;
-            i++
-        )
-        {
-            keyRefs[i] =
-                this.readUIntBE(
-                    pos,
-                    this.objectRefSize
-                );
-
-
-            pos +=
-                this.objectRefSize;
-        }
-
-
-        for (
-            let i = 0;
-            i < count;
-            i++
-        )
-        {
-            valueRefs[i] =
-                this.readUIntBE(
-                    pos,
-                    this.objectRefSize
-                );
-
-
-            pos +=
-                this.objectRefSize;
-        }
-
-
-        const dictionary =
-            {};
-
-
-        for (
-            let i = 0;
-            i < count;
-            i++
-        )
-        {
-            const key =
-                this.decodeObject(
-                    keyRefs[i]
-                );
-
-
-            const value =
-                this.decodeObject(
-                    valueRefs[i]
-                );
-
-
-            dictionary[key] =
-                value;
-        }
-
-
-        return dictionary;
-    }
-}
-
-
-// ============================================================
-// NSKEYEDARCHIVER
-// ============================================================
-
-function isUID(value)
-{
-    return (
-        value &&
-        typeof value === "object" &&
-        Object.prototype.hasOwnProperty.call(
-            value,
-            "uid"
-        )
-    );
-}
-
-
-class KeyedArchiveResolver
-{
-    constructor(plist)
-    {
-        this.plist =
-            plist;
-
-
-        this.objects =
-            plist["$objects"];
-
-
-        if (
-            !Array.isArray(
-                this.objects
-            )
-        )
-        {
-            throw new Error(
-                "$objects absent ou invalide."
-            );
-        }
-
-
-        this.cache =
-            new Map();
-
-
-        this.resolving =
-            new Set();
-    }
-
-
-    resolveUID(uidObject)
-    {
-        if (!isUID(uidObject))
-        {
-            return uidObject;
-        }
-
-
-        return this.resolveIndex(
-            uidObject.uid
-        );
-    }
-
-
-    resolveIndex(index)
-    {
-        if (
-            index < 0 ||
-            index >= this.objects.length
-        )
-        {
-            throw new Error(
-                "UID hors limites : " +
-                index
-            );
-        }
-
-
-        if (
-            this.cache.has(index)
-        )
-        {
-            return this.cache.get(
-                index
-            );
-        }
-
-
-        if (
-            this.resolving.has(index)
-        )
-        {
-            return {
-                "$circularUID": index
-            };
-        }
-
-
-        const object =
-            this.objects[index];
-
-
-        if (
-            object === "$null" ||
-            object === null
-        )
-        {
-            this.cache.set(
-                index,
-                null
-            );
-
-
-            return null;
-        }
-
-
-        this.resolving.add(
-            index
-        );
+            marker & 0x0f;
 
 
         let result;
 
 
-        try
+        switch (type)
         {
-            result =
-                this.resolveObject(
-                    object
+            case 0x0:
+                result =
+                    this.decodeSimple(
+                        info
+                    );
+                break;
+
+
+            case 0x1:
+                result =
+                    this.decodeInteger(
+                        info,
+                        offset
+                    );
+                break;
+
+
+            case 0x4:
+                result =
+                    this.decodeData(
+                        info,
+                        offset
+                    );
+                break;
+
+
+            case 0x5:
+                result =
+                    this.decodeASCII(
+                        info,
+                        offset
+                    );
+                break;
+
+
+            case 0x6:
+                result =
+                    this.decodeUTF16(
+                        info,
+                        offset
+                    );
+                break;
+
+
+            case 0x8:
+                result =
+                    {
+                        uid:
+                            this.decodeUID(
+                                info,
+                                offset
+                            )
+                    };
+                break;
+
+
+            case 0xa:
+                result =
+                    this.decodeArray(
+                        info,
+                        offset
+                    );
+                break;
+
+
+            case 0xd:
+                result =
+                    this.decodeDictionary(
+                        info,
+                        offset
+                    );
+                break;
+
+
+            default:
+                throw new Error(
+                    "Type plist non supporté : 0x" +
+                    type.toString(16)
                 );
-        }
-        finally
-        {
-            this.resolving.delete(
-                index
-            );
         }
 
 
@@ -1563,30 +1882,424 @@ class KeyedArchiveResolver
     }
 
 
-    resolveObject(object)
+    decodeSimple(info)
     {
-        if (isUID(object))
-        {
-            return this.resolveIndex(
-                object.uid
+        if (info === 0x0)
+            return null;
+
+        if (info === 0x8)
+            return false;
+
+        if (info === 0x9)
+            return true;
+
+        throw new Error(
+            "Objet simple plist non supporté."
+        );
+    }
+
+
+    decodeInteger(info, offset)
+    {
+        const size =
+            1 << info;
+
+        return Number(
+            readUIntBE(
+                this.bytes,
+                offset + 1,
+                size
+            )
+        );
+    }
+
+
+    decodeData(info, offset)
+    {
+        const lengthInfo =
+            this.decodeLength(
+                info,
+                offset
             );
+
+        const start =
+            lengthInfo.dataOffset;
+
+        const length =
+            lengthInfo.length;
+
+
+        return this.bytes.slice(
+            start,
+            start + length
+        );
+    }
+
+
+    decodeASCII(info, offset)
+    {
+        const lengthInfo =
+            this.decodeLength(
+                info,
+                offset
+            );
+
+        const start =
+            lengthInfo.dataOffset;
+
+        const length =
+            lengthInfo.length;
+
+
+        return new TextDecoder(
+            "ascii"
+        ).decode(
+            this.bytes.subarray(
+                start,
+                start + length
+            )
+        );
+    }
+
+
+    decodeUTF16(info, offset)
+    {
+        const lengthInfo =
+            this.decodeLength(
+                info,
+                offset
+            );
+
+        const start =
+            lengthInfo.dataOffset;
+
+        const length =
+            lengthInfo.length;
+
+
+        let result = "";
+
+        for (
+            let i = 0;
+            i < length;
+            i++
+        )
+        {
+            const code =
+                this.view.getUint16(
+                    start + i * 2,
+                    false
+                );
+
+            result +=
+                String.fromCharCode(code);
         }
 
 
-        if (Array.isArray(object))
+        return result;
+    }
+
+
+    decodeUID(info, offset)
+    {
+        const length =
+            info + 1;
+
+        return Number(
+            readUIntBE(
+                this.bytes,
+                offset + 1,
+                length
+            )
+        );
+    }
+
+
+    decodeArray(info, offset)
+    {
+        const lengthInfo =
+            this.decodeLength(
+                info,
+                offset
+            );
+
+        const count =
+            lengthInfo.length;
+
+        let cursor =
+            lengthInfo.dataOffset;
+
+
+        const result = [];
+
+
+        for (
+            let i = 0;
+            i < count;
+            i++
+        )
         {
-            return object.map(
-                value =>
-                    this.resolveObject(
-                        value
+            const ref =
+                Number(
+                    readUIntBE(
+                        this.bytes,
+                        cursor,
+                        this.objectRefSize
                     )
+                );
+
+            cursor +=
+                this.objectRefSize;
+
+
+            result.push(
+                this.decodeObject(ref)
             );
         }
 
+
+        return result;
+    }
+
+
+    decodeDictionary(info, offset)
+    {
+        const lengthInfo =
+            this.decodeLength(
+                info,
+                offset
+            );
+
+        const count =
+            lengthInfo.length;
+
+        let cursor =
+            lengthInfo.dataOffset;
+
+
+        const keyRefs = [];
+
+        const valueRefs = [];
+
+
+        for (
+            let i = 0;
+            i < count;
+            i++
+        )
+        {
+            keyRefs.push(
+                Number(
+                    readUIntBE(
+                        this.bytes,
+                        cursor,
+                        this.objectRefSize
+                    )
+                )
+            );
+
+            cursor +=
+                this.objectRefSize;
+        }
+
+
+        for (
+            let i = 0;
+            i < count;
+            i++
+        )
+        {
+            valueRefs.push(
+                Number(
+                    readUIntBE(
+                        this.bytes,
+                        cursor,
+                        this.objectRefSize
+                    )
+                )
+            );
+
+            cursor +=
+                this.objectRefSize;
+        }
+
+
+        const result = {};
+
+        for (
+            let i = 0;
+            i < count;
+            i++
+        )
+        {
+            result[
+                this.decodeObject(
+                    keyRefs[i]
+                )
+            ] =
+                this.decodeObject(
+                    valueRefs[i]
+                );
+        }
+
+
+        return result;
+    }
+
+
+    decodeLength(info, offset)
+    {
+        if (info < 0x0f)
+        {
+            return {
+                length: info,
+                dataOffset: offset + 1
+            };
+        }
+
+
+        const marker =
+            this.bytes[offset + 1];
+
+        const type =
+            marker >> 4;
+
+        const intInfo =
+            marker & 0x0f;
+
+
+        if (type !== 0x1)
+        {
+            throw new Error(
+                "Longueur plist invalide."
+            );
+        }
+
+
+        const size =
+            1 << intInfo;
+
+
+        const length =
+            Number(
+                readUIntBE(
+                    this.bytes,
+                    offset + 2,
+                    size
+                )
+            );
+
+
+        return {
+            length: length,
+            dataOffset: offset + 2 + size
+        };
+    }
+}
+
+
+// ============================================================
+// NSKEYEDARCHIVER
+// ============================================================
+
+function decodeGrilleArchive(archive)
+{
+    if (!archive || !archive.$objects)
+    {
+        throw new Error(
+            "Archive NSKeyedArchiver invalide."
+        );
+    }
+
+
+    const resolver =
+        new KeyedArchiveResolver(
+            archive
+        );
+
+
+    const rootUID =
+        archive.$top?.root?.uid;
+
+
+    if (rootUID === undefined)
+    {
+        throw new Error(
+            "Racine NSKeyedArchiver absente."
+        );
+    }
+
+
+    return resolver.resolveObject(
+        rootUID
+    );
+}
+
+
+// ============================================================
+// RESOLVEUR NSKEYEDARCHIVER
+// ============================================================
+
+class KeyedArchiveResolver
+{
+    constructor(archive)
+    {
+        this.objects =
+            archive.$objects;
+
+        this.cache =
+            new Map();
+    }
+
+
+    resolveObject(value)
+    {
+        if (
+            value &&
+            typeof value === "object" &&
+            Object.prototype.hasOwnProperty.call(
+                value,
+                "uid"
+            )
+        )
+        {
+            return this.resolveUID(
+                value.uid
+            );
+        }
+
+
+        return value;
+    }
+
+
+    resolveUID(uid)
+    {
+        if (this.cache.has(uid))
+        {
+            return this.cache.get(uid);
+        }
+
+
+        const object =
+            this.objects[uid];
+
+
+        if (object === null ||
+            object === undefined)
+        {
+            return null;
+        }
+
+
+        // ----------------------------------------------------
+        // Chaînes / nombres simples
+        // ----------------------------------------------------
 
         if (
-            object === null ||
-            typeof object !== "object"
+            typeof object !== "object" ||
+            object instanceof Uint8Array ||
+            Array.isArray(object)
         )
         {
             return object;
@@ -1598,60 +2311,34 @@ class KeyedArchiveResolver
         // ----------------------------------------------------
 
         if (
-            object["NS.data"] instanceof
-            Uint8Array
+            object["NS.data"] instanceof Uint8Array
         )
         {
-            return object["NS.data"];
+            const result =
+                object["NS.data"];
+
+            this.cache.set(
+                uid,
+                result
+            );
+
+            return result;
         }
 
 
         // ----------------------------------------------------
-        // NSIndexSet
+        // NSDictionary
         // ----------------------------------------------------
 
         if (
-            object["NSRangeCount"] !==
-            undefined &&
-            object["NSRangeData"] !==
-            undefined
+            Array.isArray(object["NS.keys"]) &&
+            Array.isArray(object["NS.objects"])
         )
         {
-            return {
-                type:
-                    "NSIndexSet",
-
-                count:
-                    object["NSRangeCount"],
-
-                rangeData:
-                    this.resolveObject(
-                        object["NSRangeData"]
-                    )
-            };
-        }
-
-
-        // ----------------------------------------------------
-        // NSDictionary NSKeyedArchiver
-        // ----------------------------------------------------
-
-        if (
-            Array.isArray(
-                object["NS.keys"]
-            ) &&
-            Array.isArray(
-                object["NS.objects"]
-            )
-        )
-        {
-            const dictionary =
-                {};
-
+            const dictionary = {};
 
             const keys =
                 object["NS.keys"];
-
 
             const values =
                 object["NS.objects"];
@@ -1668,43 +2355,69 @@ class KeyedArchiveResolver
                         keys[i]
                     );
 
-
                 const value =
                     this.resolveObject(
                         values[i]
                     );
-
 
                 dictionary[key] =
                     value;
             }
 
 
+            this.cache.set(
+                uid,
+                dictionary
+            );
+
             return dictionary;
         }
 
 
         // ----------------------------------------------------
-        // Dictionnaire classique
+        // NSIndexSet
         // ----------------------------------------------------
 
-        const result =
-            {};
-
-
-        for (
-            const key of Object.keys(
-                object
-            )
+        if (
+            object.NSRangeCount !== undefined &&
+            object.NSRangeData !== undefined
         )
         {
-            if (
-                key === "$class"
-            )
-            {
-                continue;
-            }
+            const rangeData =
+                this.resolveObject(
+                    object.NSRangeData
+                );
 
+
+            const result =
+                {
+                    type: "NSIndexSet",
+                    count: object.NSRangeCount,
+                    rangeData: rangeData
+                };
+
+
+            this.cache.set(
+                uid,
+                result
+            );
+
+            return result;
+        }
+
+
+        // ----------------------------------------------------
+        // Objet générique
+        // ----------------------------------------------------
+
+        const result = {};
+
+        for (
+            const key of Object.keys(object)
+        )
+        {
+            if (key === "$class")
+                continue;
 
             result[key] =
                 this.resolveObject(
@@ -1713,802 +2426,59 @@ class KeyedArchiveResolver
         }
 
 
+        this.cache.set(
+            uid,
+            result
+        );
+
+
         return result;
-    }
-
-
-    root()
-    {
-        const top =
-            this.plist["$top"];
-
-
-        if (!top)
-        {
-            throw new Error(
-                "$top absent."
-            );
-        }
-
-
-        const rootUID =
-            top["root"];
-
-
-        if (!rootUID)
-        {
-            throw new Error(
-                "root absent dans $top."
-            );
-        }
-
-
-        console.log(
-            "UID racine :",
-            rootUID.uid
-        );
-
-
-        return this.resolveUID(
-            rootUID
-        );
     }
 }
 
 
 // ============================================================
-// DECODAGE ARCHIVE
+// EXTRACTION GRILLE
 // ============================================================
 
-function decodeGrilleArchive(
-    decoded
-)
+function extractGrilleData(root)
 {
-    console.log(
-        "================================"
-    );
-
-
-    console.log(
-        "DECODAGE BINARY PLIST"
-    );
-
-
-    console.log(
-        "Taille :",
-        decoded.length
-    );
-
-
-    const decoder =
-        new BinaryPlistDecoder(
-            decoded
-        );
-
-
-    const plist =
-        decoder.decode();
-
-
-    window.lastPlist =
-        plist;
-
-
-    window.lastPlistDecoder =
-        decoder;
-
-
-    console.log(
-        "Plist décodé :",
-        plist
-    );
-
-
-    console.log(
-        "Clés plist racine :",
-        Object.keys(plist)
-    );
-
-
-    if (
-        plist["$archiver"] !==
-        "NSKeyedArchiver"
-    )
-    {
-        throw new Error(
-            "Archive NSKeyedArchiver attendue."
-        );
-    }
-
-
-    const resolver =
-        new KeyedArchiveResolver(
-            plist
-        );
-
-
-    window.lastArchiveResolver =
-        resolver;
-
-
-    const root =
-        resolver.root();
-
-
-    window.lastArchiveRoot =
-        root;
-
-
-    console.log(
-        "OBJET RACINE NSKEYEDARCHIVER :",
-        root
-    );
-
-
     return root;
 }
 
 
 // ============================================================
-// EXTRACTION DES DONNÉES DE LA GRILLE
+// NSIndexSet
 // ============================================================
 
-function extractGrilleData(
-    root
-)
-{
-    console.log(
-        "================================"
-    );
-
-
-    console.log(
-        "EXTRACTION DONNÉES GRILLE"
-    );
-
-
-    if (
-        !root ||
-        typeof root !== "object"
-    )
-    {
-        throw new Error(
-            "Objet racine NSKeyedArchiver invalide."
-        );
-    }
-
-
-    console.log(
-        "Type root :",
-        typeof root
-    );
-
-
-    console.log(
-        "Clés root :",
-        Object.keys(root)
-    );
-
-
-    const result =
-        root;
-
-
-    const expectedKeys =
-    [
-        "GRILLE",
-        "COULEUR",
-        "PALETTE",
-        "ENCOURS",
-        "TILESIZE",
-        "TILEORIGIN"
-    ];
-
-
-    for (
-        const key of expectedKeys
-    )
-    {
-        if (
-            Object.prototype.hasOwnProperty.call(
-                result,
-                key
-            )
-        )
-        {
-            console.log(
-                key + " :",
-                result[key]
-            );
-        }
-        else
-        {
-            console.warn(
-                "Clé absente :",
-                key
-            );
-        }
-    }
-
-
-    console.log(
-        "================================"
-    );
-
-
-    return result;
-}
-
-
-// ============================================================
-// OUVERTURE .GRILLE
-// ============================================================
-
-async function loadGrilleFile(
-    file
-)
-{
-    console.log(
-        "==============================="
-    );
-
-
-    console.log(
-        "OUVERTURE GRILLE"
-    );
-
-
-    console.log(
-        "Nom :",
-        file.name
-    );
-
-
-    console.log(
-        "Taille fichier :",
-        file.size
-    );
-
-
-    console.log(
-        "Type :",
-        file.type
-    );
-
-
-    console.log(
-        "==============================="
-    );
-
-
-    if (!lzfseModule)
-    {
-        throw new Error(
-            "Le module LZFSE n'est pas prêt."
-        );
-    }
-
-
-    const buffer =
-        await file.arrayBuffer();
-
-
-    const bytes =
-        new Uint8Array(
-            buffer
-        );
-
-
-    console.log(
-        "Buffer reçu :",
-        bytes.length,
-        "octets"
-    );
-
-
-    if (
-        bytes.length < 8
-    )
-    {
-        throw new Error(
-            "Fichier .grille trop court."
-        );
-    }
-
-
-    // ----------------------------------------------------
-    // Taille originale
-    // ----------------------------------------------------
-
-    const view =
-        new DataView(
-            buffer
-        );
-
-
-    const originalSizeBig =
-        view.getBigUint64(
-            0,
-            true
-        );
-
-
-    const originalSize =
-        Number(
-            originalSizeBig
-        );
-
-
-    console.log(
-        "Taille originale annoncée :",
-        originalSize
-    );
-
-
-    if (
-        !Number.isSafeInteger(
-            originalSize
-        ) ||
-        originalSize <= 0
-    )
-    {
-        throw new Error(
-            "Taille originale invalide."
-        );
-    }
-
-
-    // ----------------------------------------------------
-    // Données LZFSE
-    // ----------------------------------------------------
-
-    const compressed =
-        bytes.subarray(
-            8
-        );
-
-
-    console.log(
-        "Taille LZFSE :",
-        compressed.length
-    );
-
-
-    if (
-        compressed.length >= 4
-    )
-    {
-        const signature =
-            String.fromCharCode(
-                compressed[0],
-                compressed[1],
-                compressed[2],
-                compressed[3]
-            );
-
-
-        console.log(
-            "Signature LZFSE :",
-            signature
-        );
-
-
-        if (
-            signature !== "bvx2"
-        )
-        {
-            console.warn(
-                "Signature LZFSE inattendue :",
-                signature
-            );
-        }
-    }
-
-
-    // ----------------------------------------------------
-    // Décompression
-    // ----------------------------------------------------
-
-    const decoded =
-        await decompressLZFSE(
-            compressed,
-            originalSize
-        );
-
-
-    console.log(
-        "Décompression terminée :",
-        decoded.length,
-        "octets"
-    );
-
-
-    window.lastDecodedGrille =
-        decoded;
-
-
-    // ----------------------------------------------------
-    // Binary plist + NSKeyedArchiver
-    // ----------------------------------------------------
-
-    const root =
-        decodeGrilleArchive(
-            decoded
-        );
-
-
-    const grilleData =
-        extractGrilleData(
-            root
-        );
-
-
-    window.lastGrilleArchive =
-        grilleData;
-
-
-    // ----------------------------------------------------
-    // Informations
-    // ----------------------------------------------------
-
-    console.log(
-        "================================"
-    );
-
-
-    console.log(
-        "ARCHIVE GRILLE"
-    );
-
-
-    console.log(
-        "GRILLE :",
-        grilleData.GRILLE
-    );
-
-
-    console.log(
-        "COULEUR :",
-        grilleData.COULEUR
-    );
-
-
-    console.log(
-        "PALETTE :",
-        grilleData.PALETTE
-    );
-
-
-    console.log(
-        "ENCOURS :",
-        grilleData.ENCOURS
-    );
-
-
-    console.log(
-        "TILESIZE :",
-        grilleData.TILESIZE
-    );
-
-
-    console.log(
-        "TILEORIGIN :",
-        grilleData.TILEORIGIN
-    );
-
-
-    console.log(
-        "================================"
-    );
-
-
-    // ----------------------------------------------------
-    // Chargement des images
-    // ----------------------------------------------------
-
-    if (
-        grilleData.GRILLE instanceof
-        Uint8Array
-    )
-    {
-        sourceImage =
-            await imageFromBytes(
-                grilleData.GRILLE
-            );
-    }
-
-
-    if (
-        grilleData.COULEUR instanceof
-        Uint8Array
-    )
-    {
-        colorImage =
-            await imageFromBytes(
-                grilleData.COULEUR
-            );
-    }
-
-
-    if (
-        grilleData.PALETTE instanceof
-        Uint8Array
-    )
-    {
-        paletteImage =
-            await imageFromBytes(
-                grilleData.PALETTE
-            );
-    }
-
-
-    // ----------------------------------------------------
-    // Taille des cases
-    // ----------------------------------------------------
-
-    if (
-        typeof grilleData.TILESIZE ===
-        "number"
-    )
-    {
-        tileSize =
-            Math.max(
-                2,
-                grilleData.TILESIZE * 2
-            );
-
-
-        const tileSizeInput =
-            document.getElementById(
-                "tileSize"
-            );
-
-
-        if (tileSizeInput)
-        {
-            tileSizeInput.value =
-                tileSize;
-        }
-    }
-
-
-    // ----------------------------------------------------
-    // Cases cochées
-    // ----------------------------------------------------
-
-    selectedTiles =
-        decodeNSIndexSet(
-            grilleData.ENCOURS
-        );
-
-
-    console.log(
-        "Cases sélectionnées :",
-        selectedTiles.size
-    );
-
-
-    // ----------------------------------------------------
-    // Affichage
-    // ----------------------------------------------------
-
-    recomputeGrid();
-
-    resetCamera();
-
-    draw();
-
-
-    const info =
-        document.getElementById(
-            "info"
-        );
-
-
-    if (info)
-    {
-        info.textContent =
-            sourceImage
-                ? sourceImage.width +
-                  " × " +
-                  sourceImage.height +
-                  " — " +
-                  cols +
-                  " × " +
-                  rows
-                : "Grille chargée";
-    }
-
-
-    console.log(
-        "GRILLE CHARGÉE"
-    );
-
-
-    console.log(
-        "================================"
-    );
-}
-
-
-// ============================================================
-// NSData -> IMAGE
-// ============================================================
-
-function imageFromBytes(
-    bytes
-)
-{
-    return new Promise(
-        (resolve, reject) =>
-        {
-            console.log(
-                "imageFromBytes : début, taille =",
-                bytes ? bytes.length : null
-            );
-
-
-            if (
-                !(bytes instanceof Uint8Array)
-            )
-            {
-                console.error(
-                    "imageFromBytes : ce n'est pas un Uint8Array",
-                    bytes
-                );
-
-
-                reject(
-                    new Error(
-                        "Données image invalides"
-                    )
-                );
-
-
-                return;
-            }
-
-
-            const blob =
-                new Blob(
-                    [bytes],
-                    {
-                        type: "image/png"
-                    }
-                );
-
-
-            console.log(
-                "imageFromBytes : Blob créé",
-                blob.size,
-                blob.type
-            );
-
-
-            const url =
-                URL.createObjectURL(
-                    blob
-                );
-
-
-            console.log(
-                "imageFromBytes : URL",
-                url
-            );
-
-
-            const img =
-                new Image();
-
-
-            img.onload =
-                () =>
-                {
-                    console.log(
-                        "imageFromBytes : IMAGE CHARGÉE",
-                        img.width,
-                        "x",
-                        img.height
-                    );
-
-
-                    URL.revokeObjectURL(
-                        url
-                    );
-
-
-                    resolve(
-                        img
-                    );
-                };
-
-
-            img.onerror =
-                (event) =>
-                {
-                    console.error(
-                        "imageFromBytes : ERREUR CHARGEMENT IMAGE",
-                        event
-                    );
-
-
-                    URL.revokeObjectURL(
-                        url
-                    );
-
-
-                    reject(
-                        new Error(
-                            "Impossible de décoder le PNG"
-                        )
-                    );
-                };
-
-
-            img.src =
-                url;
-        }
-    );
-}
-
-
-// ============================================================
-// NSINDEXSET
-// ============================================================
-
-function decodeNSIndexSet(
-    value
-)
+function decodeNSIndexSet(value)
 {
     const result =
         new Set();
 
 
     if (!value)
-    {
         return result;
-    }
 
-
-    // ----------------------------------------------------
-    // Cas simple : tableau d'indices
-    // ----------------------------------------------------
 
     if (Array.isArray(value))
     {
-        for (
-            const index of value
-        )
+        for (const index of value)
         {
-            if (
-                Number.isInteger(index)
-            )
-            {
-                result.add(
-                    index
-                );
-            }
+            if (Number.isInteger(index))
+                result.add(index);
         }
-
 
         return result;
     }
 
 
-    // ----------------------------------------------------
-    // Vérification NSIndexSet
-    // ----------------------------------------------------
-
-    if (
-        value.type !==
-        "NSIndexSet"
-    )
+    if (value.type !== "NSIndexSet")
     {
         console.warn(
             "Objet NSIndexSet inattendu :",
             value
         );
-
 
         return result;
     }
@@ -2524,28 +2494,15 @@ function decodeNSIndexSet(
         value.rangeData;
 
 
-    if (
-        !(data instanceof Uint8Array)
-    )
+    if (!(data instanceof Uint8Array))
     {
         console.warn(
             "NSRangeData absent."
         );
 
-
         return result;
     }
 
-
-    console.log(
-        "NSRangeData taille :",
-        data.length
-    );
-
-
-    // ----------------------------------------------------
-    // PackedUIntSequence
-    // ----------------------------------------------------
 
     function decodePackedUInt(
         bytes,
@@ -2556,16 +2513,11 @@ function decodeNSIndexSet(
             bytes[offset++];
 
 
-        if (
-            first < 128
-        )
+        if (first < 128)
         {
             return {
-                value:
-                    first,
-
-                nextOffset:
-                    offset
+                value: first,
+                nextOffset: offset
             };
         }
 
@@ -2573,35 +2525,25 @@ function decodeNSIndexSet(
         let value =
             first - 128;
 
-
-        let multiplier =
-            128;
+        let multiplier = 128;
 
 
         while (
-            offset <
-            bytes.length
+            offset < bytes.length
         )
         {
             const byte =
                 bytes[offset++];
 
 
-            if (
-                byte < 128
-            )
+            if (byte < 128)
             {
                 value +=
-                    multiplier *
-                    byte;
-
+                    multiplier * byte;
 
                 return {
-                    value:
-                        value,
-
-                    nextOffset:
-                        offset
+                    value: value,
+                    nextOffset: offset
                 };
             }
 
@@ -2610,9 +2552,7 @@ function decodeNSIndexSet(
                 multiplier *
                 (byte - 128);
 
-
-            multiplier *=
-                128;
+            multiplier *= 128;
         }
 
 
@@ -2622,21 +2562,13 @@ function decodeNSIndexSet(
     }
 
 
-    // ----------------------------------------------------
-    // Décodage de tous les UInt
-    // ----------------------------------------------------
+    const integers = [];
 
-    const integers =
-        [];
-
-
-    let offset =
-        0;
+    let offset = 0;
 
 
     while (
-        offset <
-        data.length
+        offset < data.length
     )
     {
         const decoded =
@@ -2645,11 +2577,9 @@ function decodeNSIndexSet(
                 offset
             );
 
-
         integers.push(
             decoded.value
         );
-
 
         offset =
             decoded.nextOffset;
@@ -2662,10 +2592,6 @@ function decodeNSIndexSet(
         "entiers"
     );
 
-
-    // ----------------------------------------------------
-    // Chaque plage = location + length
-    // ----------------------------------------------------
 
     const expectedIntegerCount =
         value.count * 2;
@@ -2685,12 +2611,7 @@ function decodeNSIndexSet(
     }
 
 
-    // ----------------------------------------------------
-    // Conversion des plages
-    // ----------------------------------------------------
-
-    let decodedCount =
-        0;
+    let decodedCount = 0;
 
 
     for (
@@ -2701,7 +2622,6 @@ function decodeNSIndexSet(
     {
         const location =
             integers[i];
-
 
         const length =
             integers[i + 1];
@@ -2715,12 +2635,8 @@ function decodeNSIndexSet(
         );
 
 
-        if (
-            length <= 0
-        )
-        {
+        if (length <= 0)
             continue;
-        }
 
 
         for (
@@ -2735,8 +2651,7 @@ function decodeNSIndexSet(
         }
 
 
-        decodedCount +=
-            length;
+        decodedCount += length;
     }
 
 
@@ -2757,1491 +2672,73 @@ function decodeNSIndexSet(
 
 
 // ============================================================
-// IMAGE SIMPLE
+// UTILITAIRE UINT BIG-ENDIAN
 // ============================================================
 
-async function loadImageFile(
-    file
+function readUIntBE(
+    bytes,
+    offset,
+    size
 )
 {
-    console.log(
-        "Chargement image :",
-        file.name
-    );
-
-
-    const url =
-        URL.createObjectURL(
-            file
-        );
-
-
-    const image =
-        new Image();
-
-
-    image.onload =
-        function ()
-        {
-            URL.revokeObjectURL(
-                url
-            );
-
-
-            sourceImage =
-                image;
-
-
-            colorImage =
-                null;
-
-
-            paletteImage =
-                null;
-
-
-            selectedTiles =
-                new Set();
-
-
-            recomputeGrid();
-
-            resetCamera();
-
-            draw();
-
-
-            const info =
-                document.getElementById(
-                    "info"
-                );
-
-
-            if (info)
-            {
-                info.textContent =
-                    image.width +
-                    " × " +
-                    image.height +
-                    " — " +
-                    cols +
-                    " × " +
-                    rows;
-            }
-
-
-            console.log(
-                "Image chargée :",
-                image.width,
-                "x",
-                image.height
-            );
-        };
-
-
-    image.onerror =
-        function ()
-        {
-            URL.revokeObjectURL(
-                url
-            );
-
-
-            alert(
-                "Impossible de charger l'image."
-            );
-        };
-
-
-    image.src =
-        url;
-}
-
-
-// ============================================================
-// GRILLE
-// ============================================================
-
-function recomputeGrid()
-{
-    if (!sourceImage)
-    {
-        cols = 0;
-        rows = 0;
-
-
-        canvas.width = 1;
-        canvas.height = 1;
-
-
-        return;
-    }
-
-
-    cols =
-        Math.ceil(
-            sourceImage.width /
-            tileSize
-        );
-
-
-    rows =
-        Math.ceil(
-            sourceImage.height /
-            tileSize
-        );
-
-
-    // --------------------------------------------------------
-    // IMPORTANT :
-    //
-    // Le canvas garde maintenant sa taille logique de viewport.
-    // Les dimensions de la grille sont des coordonnées monde.
-    // --------------------------------------------------------
-
-    resizeCanvasToWorkspace();
-
-
-    console.log(
-        "Grille :",
-        cols,
-        "x",
-        rows,
-        "cases"
-    );
-}
-
-
-// ============================================================
-// RESIZE CANVAS
-// ============================================================
-
-function resizeCanvasToWorkspace()
-{
-    if (!canvas)
-    {
-        return;
-    }
-
-
-    const workspace =
-        document.getElementById(
-            "workspace"
-        );
-
-
-    if (!workspace)
-    {
-        return;
-    }
-
-
-    const rect =
-        workspace.getBoundingClientRect();
-
-
-    const width =
-        Math.max(
-            1,
-            Math.round(rect.width)
-        );
-
-
-    const height =
-        Math.max(
-            1,
-            Math.round(rect.height)
-        );
-
-
-    const dpr =
-        Math.max(
-            1,
-            window.devicePixelRatio || 1
-        );
-
-
-    canvas.width =
-        Math.round(
-            width * dpr
-        );
-
-
-    canvas.height =
-        Math.round(
-            height * dpr
-        );
-
-
-    canvas.style.width =
-        width + "px";
-
-
-    canvas.style.height =
-        height + "px";
-}
-
-
-// ============================================================
-// CAMERA
-// ============================================================
-
-function getViewportSize()
-{
-    if (!canvas)
-    {
-        return {
-            width: 1,
-            height: 1
-        };
-    }
-
-
-    const rect =
-        canvas.getBoundingClientRect();
-
-
-    return {
-        width:
-            rect.width,
-
-        height:
-            rect.height
-    };
-}
-
-
-function resetCamera()
-{
-    if (!sourceImage)
-    {
-        zoomFactor = 1.0;
-
-        panX = 0;
-        panY = 0;
-
-        return;
-    }
-
-
-    const viewport =
-        getViewportSize();
-
-
-    const worldWidth =
-        cols * tileSize;
-
-
-    const worldHeight =
-        rows * tileSize;
-
-
-    if (
-        worldWidth <= 0 ||
-        worldHeight <= 0
-    )
-    {
-        zoomFactor = 1.0;
-
-        panX = 0;
-        panY = 0;
-
-        return;
-    }
-
-
-    const scaleX =
-        viewport.width /
-        worldWidth;
-
-
-    const scaleY =
-        viewport.height /
-        worldHeight;
-
-
-    zoomFactor =
-        Math.min(
-            scaleX,
-            scaleY
-        );
-
-
-    zoomFactor =
-        Math.max(
-            0.05,
-            Math.min(
-                10.0,
-                zoomFactor
-            )
-        );
-
-
-    panX =
-        (
-            viewport.width -
-            worldWidth * zoomFactor
-        ) / 2;
-
-
-    panY =
-        (
-            viewport.height -
-            worldHeight * zoomFactor
-        ) / 2;
-
-
-    console.log(
-        "Camera reset :",
-        {
-            zoom:
-                zoomFactor,
-
-            panX:
-                panX,
-
-            panY:
-                panY
-        }
-    );
-}
-
-
-// ============================================================
-// POINT ÉCRAN -> MONDE
-// ============================================================
-
-function canvasPointFromClient(
-    clientX,
-    clientY
-)
-{
-    const rect =
-        canvas.getBoundingClientRect();
-
-
-    const screenX =
-        clientX -
-        rect.left;
-
-
-    const screenY =
-        clientY -
-        rect.top;
-
-
-    return {
-        x:
-            (screenX - panX) /
-            zoomFactor,
-
-        y:
-            (screenY - panY) /
-            zoomFactor
-    };
-}
-
-
-// ============================================================
-// DESSIN
-// ============================================================
-
-function draw()
-{
-    if (!canvas || !ctx)
-    {
-        return;
-    }
-
-
-    // --------------------------------------------------------
-    // Dimensions CSS du viewport
-    // --------------------------------------------------------
-
-    const rect =
-        canvas.getBoundingClientRect();
-
-
-    const viewportWidth =
-        rect.width;
-
-
-    const viewportHeight =
-        rect.height;
-
-
-    const dpr =
-        Math.max(
-            1,
-            window.devicePixelRatio || 1
-        );
-
-
-    // --------------------------------------------------------
-    // Réinitialisation DPR
-    // --------------------------------------------------------
-
-    ctx.setTransform(
-        dpr,
-        0,
-        0,
-        dpr,
-        0,
-        0
-    );
-
-
-    ctx.clearRect(
-        0,
-        0,
-        viewportWidth,
-        viewportHeight
-    );
-
-
-    if (!sourceImage)
-    {
-        return;
-    }
-
-
-    // --------------------------------------------------------
-    // Caméra
-    // --------------------------------------------------------
-
-    ctx.save();
-
-
-    ctx.translate(
-        panX,
-        panY
-    );
-
-
-    ctx.scale(
-        zoomFactor,
-        zoomFactor
-    );
-
-
-    // --------------------------------------------------------
-    // Dimensions monde
-    // --------------------------------------------------------
-
-    const worldWidth =
-        cols * tileSize;
-
-
-    const worldHeight =
-        rows * tileSize;
-
-
-    // --------------------------------------------------------
-    // Image source
-    // --------------------------------------------------------
-
-    ctx.drawImage(
-        sourceImage,
-        0,
-        0,
-        worldWidth,
-        worldHeight
-    );
-
-
-    // --------------------------------------------------------
-    // Cases sélectionnées
-    // --------------------------------------------------------
-
-    if (selectedTiles)
-    {
-        for (
-            const index of selectedTiles
-        )
-        {
-            if (
-                index < 0 ||
-                index >= cols * rows
-            )
-            {
-                continue;
-            }
-
-
-            const col =
-                index % cols;
-
-
-            const row =
-                Math.floor(
-                    index / cols
-                );
-
-
-            const x =
-                col * tileSize;
-
-
-            const y =
-                row * tileSize;
-
-
-            // ------------------------------------------------
-            // Si COULEUR existe :
-            //
-            // on affiche la couleur réelle de la case.
-            // ------------------------------------------------
-
-            if (colorImage)
-            {
-                const sx =
-                    x *
-                    colorImage.width /
-                    worldWidth;
-
-
-                const sy =
-                    y *
-                    colorImage.height /
-                    worldHeight;
-
-
-                const sw =
-                    tileSize *
-                    colorImage.width /
-                    worldWidth;
-
-
-                const sh =
-                    tileSize *
-                    colorImage.height /
-                    worldHeight;
-
-
-                ctx.drawImage(
-                    colorImage,
-
-                    sx,
-                    sy,
-                    sw,
-                    sh,
-
-                    x,
-                    y,
-                    tileSize,
-                    tileSize
-                );
-            }
-            else
-            {
-                // ------------------------------------------------
-                // Image simple : overlay rouge translucide.
-                // ------------------------------------------------
-
-                ctx.fillStyle =
-                    "rgba(255, 0, 0, 0.35)";
-
-
-                ctx.fillRect(
-                    x,
-                    y,
-                    tileSize,
-                    tileSize
-                );
-            }
-        }
-    }
-
-
-    // --------------------------------------------------------
-    // Grille
-    // --------------------------------------------------------
-
-    ctx.save();
-
-
-    ctx.strokeStyle =
-        "rgba(0, 0, 0, 0.35)";
-
-
-    ctx.lineWidth =
-        1 / zoomFactor;
-
-
-    ctx.beginPath();
-
+    let value = 0;
 
     for (
-        let col = 0;
-        col <= cols;
-        col++
+        let i = 0;
+        i < size;
+        i++
     )
     {
-        const x =
-            col * tileSize +
-            0.5;
-
-
-        ctx.moveTo(
-            x,
-            0
-        );
-
-
-        ctx.lineTo(
-            x,
-            worldHeight
-        );
+        value =
+            value * 256 +
+            bytes[offset + i];
     }
 
-
-    for (
-        let row = 0;
-        row <= rows;
-        row++
-    )
-    {
-        const y =
-            row * tileSize +
-            0.5;
-
-
-        ctx.moveTo(
-            0,
-            y
-        );
-
-
-        ctx.lineTo(
-            worldWidth,
-            y
-        );
-    }
-
-
-    ctx.stroke();
-
-
-    ctx.restore();
-
-
-    ctx.restore();
+    return value;
 }
 
 
 // ============================================================
-// SELECTION
+// INFOS
 // ============================================================
 
-function tileIndexForPoint(
-    x,
-    y
-)
+function updateInfo()
 {
-    const col =
-        Math.floor(
-            x / tileSize
-        );
+    const info =
+        document.getElementById("info");
 
-
-    const row =
-        Math.floor(
-            y / tileSize
-        );
-
-
-    if (
-        col < 0 ||
-        col >= cols ||
-        row < 0 ||
-        row >= rows
-    )
-    {
-        return -1;
-    }
-
-
-    return (
-        row * cols +
-        col
-    );
-}
-
-
-// ============================================================
-// TOGGLE
-// ============================================================
-
-function toggleTileAt(
-    x,
-    y
-)
-{
-    const index =
-        tileIndexForPoint(
-            x,
-            y
-        );
-
-
-    if (index < 0)
-    {
+    if (!info)
         return;
-    }
 
 
-    if (
-        selectedTiles.has(
-            index
-        )
-    )
+    if (!sourceImage)
     {
-        selectedTiles.delete(
-            index
-        );
-    }
-    else
-    {
-        selectedTiles.add(
-            index
-        );
-    }
-
-
-    draw();
-}
-
-
-// ============================================================
-// SELECTION PAR GLISSEMENT
-// ============================================================
-
-function selectTileAt(
-    x,
-    y
-)
-{
-    const index =
-        tileIndexForPoint(
-            x,
-            y
-        );
-
-
-    if (index < 0)
-    {
-        return;
-    }
-
-
-    if (
-        !selectedTiles.has(
-            index
-        )
-    )
-    {
-        selectedTiles.add(
-            index
-        );
-
-
-        draw();
-    }
-}
-
-
-// ============================================================
-// POINTER DOWN
-// ============================================================
-
-function handlePointerDown(
-    event
-)
-{
-    // --------------------------------------------------------
-    // Les événements tactiles sont traités par touch*.
-    // --------------------------------------------------------
-
-    if (
-        event.pointerType === "touch"
-    )
-    {
-        return;
-    }
-
-
-    event.preventDefault();
-
-
-    try
-    {
-        canvas.setPointerCapture(
-            event.pointerId
-        );
-    }
-    catch (e)
-    {
-    }
-
-
-    activePointers.set(
-        event.pointerId,
-        {
-            x:
-                event.clientX,
-
-            y:
-                event.clientY,
-
-            type:
-                event.pointerType,
-
-            buttons:
-                event.buttons
-        }
-    );
-
-
-    if (
-        activePointers.size !== 1
-    )
-    {
-        return;
-    }
-
-
-    singlePointer =
-        event.pointerId;
-
-
-    singlePointerMoved =
-        false;
-
-
-    const point =
-        canvasPointFromClient(
-            event.clientX,
-            event.clientY
-        );
-
-
-    lastPointerWorldX =
-        point.x;
-
-
-    lastPointerWorldY =
-        point.y;
-}
-
-
-// ============================================================
-// POINTER MOVE
-// ============================================================
-
-function handlePointerMove(
-    event
-)
-{
-    if (
-        event.pointerType === "touch"
-    )
-    {
-        return;
-    }
-
-
-    event.preventDefault();
-
-
-    if (
-        !activePointers.has(
-            event.pointerId
-        )
-    )
-    {
-        return;
-    }
-
-
-    activePointers.set(
-        event.pointerId,
-        {
-            x:
-                event.clientX,
-
-            y:
-                event.clientY,
-
-            type:
-                event.pointerType,
-
-            buttons:
-                event.buttons
-        }
-    );
-
-
-    if (
-        activePointers.size !== 1 ||
-        singlePointer !== event.pointerId
-    )
-    {
-        return;
-    }
-
-
-    const point =
-        canvasPointFromClient(
-            event.clientX,
-            event.clientY
-        );
-
-
-    const dx =
-        point.x -
-        lastPointerWorldX;
-
-
-    const dy =
-        point.y -
-        lastPointerWorldY;
-
-
-    if (
-        Math.abs(dx) > 2 ||
-        Math.abs(dy) > 2
-    )
-    {
-        singlePointerMoved =
-            true;
-    }
-
-
-    // --------------------------------------------------------
-    // Souris maintenue :
-    // sélection pendant le déplacement.
-    // --------------------------------------------------------
-
-    if (
-        event.pointerType === "mouse" &&
-        (event.buttons & 1) !== 0
-    )
-    {
-        selectTileAt(
-            point.x,
-            point.y
-        );
-    }
-
-
-    lastPointerWorldX =
-        point.x;
-
-
-    lastPointerWorldY =
-        point.y;
-}
-
-
-// ============================================================
-// POINTER UP
-// ============================================================
-
-function handlePointerUp(
-    event
-)
-{
-    if (
-        event.pointerType === "touch"
-    )
-    {
-        return;
-    }
-
-
-    event.preventDefault();
-
-
-    const wasSingle =
-        activePointers.size === 1 &&
-        singlePointer === event.pointerId;
-
-
-    // --------------------------------------------------------
-    // Clic sans déplacement :
-    // toggle.
-    // --------------------------------------------------------
-
-    if (
-        wasSingle &&
-        !singlePointerMoved
-    )
-    {
-        const point =
-            canvasPointFromClient(
-                event.clientX,
-                event.clientY
-            );
-
-
-        toggleTileAt(
-            point.x,
-            point.y
-        );
-    }
-
-
-    activePointers.delete(
-        event.pointerId
-    );
-
-
-    try
-    {
-        canvas.releasePointerCapture(
-            event.pointerId
-        );
-    }
-    catch (e)
-    {
-    }
-
-
-    if (
-        activePointers.size === 0
-    )
-    {
-        singlePointer =
-            null;
-
-
-        singlePointerMoved =
-            false;
-    }
-}
-
-
-// ============================================================
-// DISTANCE ENTRE DEUX TOUCHES
-// ============================================================
-
-function distanceBetweenTouches(
-    touch1,
-    touch2
-)
-{
-    const dx =
-        touch1.clientX -
-        touch2.clientX;
-
-
-    const dy =
-        touch1.clientY -
-        touch2.clientY;
-
-
-    return Math.sqrt(
-        dx * dx +
-        dy * dy
-    );
-}
-
-
-// ============================================================
-// TOUCH START
-// ============================================================
-
-function handleTouchStart(
-    event
-)
-{
-    event.preventDefault();
-
-
-    touchInteractionActive =
-        true;
-
-
-    // --------------------------------------------------------
-    // Deux doigts = début du pinch
-    // --------------------------------------------------------
-
-    if (
-        event.touches.length === 2
-    )
-    {
-        const t1 =
-            event.touches[0];
-
-
-        const t2 =
-            event.touches[1];
-
-
-        lastPinchDistance =
-            distanceBetweenTouches(
-                t1,
-                t2
-            );
-
-
-        const rect =
-            canvas.getBoundingClientRect();
-
-
-        lastPinchCenterX =
-            (
-                (t1.clientX +
-                 t2.clientX) /
-                2
-            ) -
-            rect.left;
-
-
-        lastPinchCenterY =
-            (
-                (t1.clientY +
-                 t2.clientY) /
-                2
-            ) -
-            rect.top;
-
-
-        // ----------------------------------------------------
-        // Le passage de 1 à 2 doigts annule le tap.
-        // ----------------------------------------------------
-
-        singlePointerMoved =
-            true;
-
+        info.textContent =
+            "Aucune image";
 
         return;
     }
 
 
-    // --------------------------------------------------------
-    // Un doigt
-    // --------------------------------------------------------
-
-    if (
-        event.touches.length === 1
-    )
-    {
-        const touch =
-            event.touches[0];
-
-
-        const point =
-            canvasPointFromClient(
-                touch.clientX,
-                touch.clientY
-            );
-
-
-        singlePointerMoved =
-            false;
-
-
-        lastPointerWorldX =
-            point.x;
-
-
-        lastPointerWorldY =
-            point.y;
-    }
+    info.textContent =
+        cols +
+        " × " +
+        rows +
+        " — " +
+        selectedTiles.size +
+        " cases";
 }
 
 
 // ============================================================
-// TOUCH MOVE
-// ============================================================
-
-function handleTouchMove(
-    event
-)
-{
-    event.preventDefault();
-
-
-    // --------------------------------------------------------
-    // PINCH / DÉPLACEMENT À DEUX DOIGTS
-    // --------------------------------------------------------
-
-    if (
-        event.touches.length === 2
-    )
-    {
-        const t1 =
-            event.touches[0];
-
-
-        const t2 =
-            event.touches[1];
-
-
-        const distance =
-            distanceBetweenTouches(
-                t1,
-                t2
-            );
-
-
-        const rect =
-            canvas.getBoundingClientRect();
-
-
-        const centerX =
-            (
-                (t1.clientX +
-                 t2.clientX) /
-                2
-            ) -
-            rect.left;
-
-
-        const centerY =
-            (
-                (t1.clientY +
-                 t2.clientY) /
-                2
-            ) -
-            rect.top;
-
-
-        if (
-            lastPinchDistance > 0
-        )
-        {
-            // ------------------------------------------------
-            // Coordonnée monde sous le centre des doigts
-            // avant le changement de zoom.
-            // ------------------------------------------------
-
-            const worldX =
-                (
-                    centerX -
-                    panX
-                ) /
-                zoomFactor;
-
-
-            const worldY =
-                (
-                    centerY -
-                    panY
-                ) /
-                zoomFactor;
-
-
-            // ------------------------------------------------
-            // Nouveau zoom
-            // ------------------------------------------------
-
-            const ratio =
-                distance /
-                lastPinchDistance;
-
-
-            let newZoom =
-                zoomFactor *
-                ratio;
-
-
-            newZoom =
-                Math.max(
-                    0.05,
-                    Math.min(
-                        10.0,
-                        newZoom
-                    )
-                );
-
-
-            // ------------------------------------------------
-            // Conserver le point sous les doigts.
-            // ------------------------------------------------
-
-            panX =
-                centerX -
-                worldX *
-                newZoom;
-
-
-            panY =
-                centerY -
-                worldY *
-                newZoom;
-
-
-            // ------------------------------------------------
-            // Déplacement du centre des doigts.
-            // ------------------------------------------------
-
-            panX +=
-                centerX -
-                lastPinchCenterX;
-
-
-            panY +=
-                centerY -
-                lastPinchCenterY;
-
-
-            zoomFactor =
-                newZoom;
-
-
-            lastPinchDistance =
-                distance;
-
-
-            lastPinchCenterX =
-                centerX;
-
-
-            lastPinchCenterY =
-                centerY;
-
-
-            draw();
-        }
-
-
-        return;
-    }
-
-
-    // --------------------------------------------------------
-    // UN DOIGT
-    // --------------------------------------------------------
-
-    if (
-        event.touches.length === 1
-    )
-    {
-        const touch =
-            event.touches[0];
-
-
-        const point =
-            canvasPointFromClient(
-                touch.clientX,
-                touch.clientY
-            );
-
-
-        const dx =
-            point.x -
-            lastPointerWorldX;
-
-
-        const dy =
-            point.y -
-            lastPointerWorldY;
-
-
-        if (
-            Math.abs(dx) > 2 ||
-            Math.abs(dy) > 2
-        )
-        {
-            singlePointerMoved =
-                true;
-        }
-
-
-        if (
-            singlePointerMoved
-        )
-        {
-            selectTileAt(
-                point.x,
-                point.y
-            );
-        }
-
-
-        lastPointerWorldX =
-            point.x;
-
-
-        lastPointerWorldY =
-            point.y;
-    }
-}
-
-
-// ============================================================
-// TOUCH END
-// ============================================================
-
-function handleTouchEnd(
-    event
-)
-{
-    event.preventDefault();
-
-
-    // --------------------------------------------------------
-    // Un doigt sans déplacement = TAP
-    // --------------------------------------------------------
-
-    if (
-        event.touches.length === 0 &&
-        !singlePointerMoved
-    )
-    {
-        toggleTileAt(
-            lastPointerWorldX,
-            lastPointerWorldY
-        );
-    }
-
-
-    // --------------------------------------------------------
-    // Fin du pinch
-    // --------------------------------------------------------
-
-    if (
-        event.touches.length < 2
-    )
-    {
-        lastPinchDistance =
-            0;
-    }
-
-
-    // --------------------------------------------------------
-    // Plus aucun doigt
-    // --------------------------------------------------------
-
-    if (
-        event.touches.length === 0
-    )
-    {
-        singlePointerMoved =
-            false;
-
-
-        touchInteractionActive =
-            false;
-    }
-}
-
-
-// ============================================================
-// EFFACER
+// EFFACER SELECTION
 // ============================================================
 
 function clearSelection()
 {
     selectedTiles.clear();
 
+    updateInfo();
 
     draw();
-
-
-    console.log(
-        "Sélection effacée."
-    );
 }
