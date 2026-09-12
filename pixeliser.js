@@ -8,6 +8,8 @@ import createLZFSEModule from "./lzfse/lzfse.js";
 let lzfseModule = null;
 
 let sourceImage = null;
+let colorImage = null;
+let paletteImage = null;
 
 let canvas = null;
 let ctx = null;
@@ -21,8 +23,7 @@ let selectedTiles = new Set();
 
 let zoomFactor = 1.0;
 
-let lastTouchDistance = null;
-
+let lastTouchDistance = 0;
 let touchStartX = 0;
 let touchStartY = 0;
 
@@ -30,12 +31,253 @@ let isDragging = false;
 
 
 // ============================================================
-// INITIALISATION LZFSE
+// INITIALISATION
+// ============================================================
+
+document.addEventListener(
+    "DOMContentLoaded",
+    async function ()
+    {
+        console.log("Pixeliser démarrage...");
+
+        canvas =
+            document.getElementById("canvas");
+
+        if (!canvas)
+        {
+            console.error(
+                "Canvas introuvable."
+            );
+
+            return;
+        }
+
+        ctx =
+            canvas.getContext("2d");
+
+        if (!ctx)
+        {
+            console.error(
+                "Impossible de créer le contexte 2D."
+            );
+
+            return;
+        }
+
+
+        // ----------------------------------------------------
+        // Boutons
+        // ----------------------------------------------------
+
+        const openButton =
+            document.getElementById(
+                "openButton"
+            );
+
+        const openGrilleButton =
+            document.getElementById(
+                "openGrilleButton"
+            );
+
+        const clearButton =
+            document.getElementById(
+                "clearButton"
+            );
+
+        const imageInput =
+            document.getElementById(
+                "imageInput"
+            );
+
+        const grilleInput =
+            document.getElementById(
+                "grilleInput"
+            );
+
+        const tileSizeInput =
+            document.getElementById(
+                "tileSize"
+            );
+
+
+        if (openButton)
+        {
+            openButton.addEventListener(
+                "click",
+                function ()
+                {
+                    imageInput.click();
+                }
+            );
+        }
+
+
+        if (imageInput)
+        {
+            imageInput.addEventListener(
+                "change",
+                function (event)
+                {
+                    const file =
+                        event.target.files[0];
+
+                    if (file)
+                    {
+                        loadImageFile(
+                            file
+                        );
+                    }
+                }
+            );
+        }
+
+
+        if (openGrilleButton)
+        {
+            openGrilleButton.addEventListener(
+                "click",
+                function ()
+                {
+                    grilleInput.click();
+                }
+            );
+        }
+
+
+        if (grilleInput)
+        {
+            grilleInput.addEventListener(
+                "change",
+                async function (event)
+                {
+                    const file =
+                        event.target.files[0];
+
+                    if (!file)
+                    {
+                        return;
+                    }
+
+                    try
+                    {
+                        await loadGrilleFile(
+                            file
+                        );
+                    }
+                    catch (error)
+                    {
+                        console.error(
+                            "Erreur lecture grille :",
+                            error
+                        );
+
+                        alert(
+                            "Erreur lecture grille :\n" +
+                            error.message
+                        );
+                    }
+                }
+            );
+        }
+
+
+        if (clearButton)
+        {
+            clearButton.addEventListener(
+                "click",
+                clearSelection
+            );
+        }
+
+
+        if (tileSizeInput)
+        {
+            tileSizeInput.addEventListener(
+                "change",
+                function ()
+                {
+                    const value =
+                        parseInt(
+                            tileSizeInput.value,
+                            10
+                        );
+
+                    if (
+                        !Number.isFinite(value) ||
+                        value < 2
+                    )
+                    {
+                        return;
+                    }
+
+                    tileSize =
+                        value;
+
+                    recomputeGrid();
+
+                    draw();
+                }
+            );
+        }
+
+
+        // ----------------------------------------------------
+        // Touch
+        // ----------------------------------------------------
+
+        canvas.addEventListener(
+            "touchstart",
+            handleTouchStart,
+            {
+                passive: false
+            }
+        );
+
+        canvas.addEventListener(
+            "touchmove",
+            handleTouchMove,
+            {
+                passive: false
+            }
+        );
+
+        canvas.addEventListener(
+            "touchend",
+            handleTouchEnd,
+            {
+                passive: false
+            }
+        );
+
+
+        // ----------------------------------------------------
+        // LZFSE
+        // ----------------------------------------------------
+
+        try
+        {
+            await initializeLZFSE();
+        }
+        catch (error)
+        {
+            console.error(
+                "LZFSE indisponible :",
+                error
+            );
+        }
+    }
+);
+
+
+// ============================================================
+// LZFSE
 // ============================================================
 
 async function initializeLZFSE()
 {
-    console.log("Chargement du module LZFSE...");
+    console.log(
+        "Chargement du module LZFSE..."
+    );
 
     try
     {
@@ -47,10 +289,12 @@ async function initializeLZFSE()
             module
         );
 
+
         console.log(
             "decode_lzfse_memfs :",
             typeof module._decode_lzfse_memfs
         );
+
 
         if (
             typeof module._decode_lzfse_memfs !==
@@ -62,6 +306,7 @@ async function initializeLZFSE()
             );
         }
 
+
         if (!module.FS)
         {
             throw new Error(
@@ -69,7 +314,10 @@ async function initializeLZFSE()
             );
         }
 
-        lzfseModule = module;
+
+        lzfseModule =
+            module;
+
 
         console.log(
             "LZFSE prêt"
@@ -86,401 +334,6 @@ async function initializeLZFSE()
     }
 }
 
-
-// ============================================================
-// DISTANCE ENTRE DEUX TOUCHES
-// ============================================================
-
-function touchDistance(touch1, touch2)
-{
-    const dx =
-        touch2.clientX -
-        touch1.clientX;
-
-    const dy =
-        touch2.clientY -
-        touch1.clientY;
-
-    return Math.sqrt(
-        dx * dx +
-        dy * dy
-    );
-}
-
-
-// ============================================================
-// POSITION DANS LE CANVAS
-// ============================================================
-
-function canvasPointFromEvent(event)
-{
-    const rect =
-        canvas.getBoundingClientRect();
-
-    return {
-        x:
-            (event.clientX - rect.left) /
-            zoomFactor,
-
-        y:
-            (event.clientY - rect.top) /
-            zoomFactor
-    };
-}
-
-
-// ============================================================
-// CALCUL DE LA GRILLE
-// ============================================================
-
-function recomputeGrid()
-{
-    if (!sourceImage)
-        return;
-
-    cols =
-        Math.ceil(
-            sourceImage.naturalWidth /
-            tileSize
-        );
-
-    rows =
-        Math.ceil(
-            sourceImage.naturalHeight /
-            tileSize
-        );
-
-    canvas.width =
-        cols * tileSize;
-
-    canvas.height =
-        rows * tileSize;
-
-    updateCanvasSize();
-
-    draw();
-
-    updateInfo();
-}
-
-
-// ============================================================
-// TAILLE AFFICHÉE DU CANVAS
-// ============================================================
-
-function updateCanvasSize()
-{
-    if (!canvas)
-        return;
-
-    canvas.style.width =
-        (canvas.width * zoomFactor) +
-        "px";
-
-    canvas.style.height =
-        (canvas.height * zoomFactor) +
-        "px";
-}
-
-
-// ============================================================
-// AFFICHAGE
-// ============================================================
-
-function draw()
-{
-    if (!canvas || !ctx)
-        return;
-
-    ctx.setTransform(
-        1,
-        0,
-        0,
-        1,
-        0,
-        0
-    );
-
-    ctx.clearRect(
-        0,
-        0,
-        canvas.width,
-        canvas.height
-    );
-
-
-    // --------------------------------------------------------
-    // Image
-    // --------------------------------------------------------
-
-    if (sourceImage)
-    {
-        ctx.drawImage(
-            sourceImage,
-            0,
-            0,
-            canvas.width,
-            canvas.height
-        );
-    }
-
-
-    // --------------------------------------------------------
-    // Cases sélectionnées
-    // --------------------------------------------------------
-
-    ctx.save();
-
-    ctx.globalAlpha = 0.35;
-
-    ctx.fillStyle =
-        "rgba(255, 0, 0, 0.5)";
-
-    for (const index of selectedTiles)
-    {
-        const col =
-            index % cols;
-
-        const row =
-            Math.floor(
-                index / cols
-            );
-
-        ctx.fillRect(
-            col * tileSize,
-            row * tileSize,
-            tileSize,
-            tileSize
-        );
-    }
-
-    ctx.restore();
-
-
-    // --------------------------------------------------------
-    // Grille
-    // --------------------------------------------------------
-
-    if (sourceImage)
-    {
-        ctx.save();
-
-        ctx.strokeStyle =
-            "rgba(0, 0, 0, 0.25)";
-
-        ctx.lineWidth = 1;
-
-
-        for (let x = 0; x <= cols; x++)
-        {
-            ctx.beginPath();
-
-            ctx.moveTo(
-                x * tileSize + 0.5,
-                0
-            );
-
-            ctx.lineTo(
-                x * tileSize + 0.5,
-                rows * tileSize
-            );
-
-            ctx.stroke();
-        }
-
-
-        for (let y = 0; y <= rows; y++)
-        {
-            ctx.beginPath();
-
-            ctx.moveTo(
-                0,
-                y * tileSize + 0.5
-            );
-
-            ctx.lineTo(
-                cols * tileSize,
-                y * tileSize + 0.5
-            );
-
-            ctx.stroke();
-        }
-
-        ctx.restore();
-    }
-}
-
-
-// ============================================================
-// INFORMATIONS
-// ============================================================
-
-function updateInfo()
-{
-    const info =
-        document.getElementById(
-            "info"
-        );
-
-    if (!info)
-        return;
-
-    if (!sourceImage)
-    {
-        info.textContent =
-            "Aucune image";
-
-        return;
-    }
-
-    info.textContent =
-        `${sourceImage.naturalWidth} × ` +
-        `${sourceImage.naturalHeight} — ` +
-        `${cols} × ${rows} cases — ` +
-        `${selectedTiles.size} sélectionnées`;
-}
-
-
-// ============================================================
-// CHARGEMENT IMAGE
-// ============================================================
-
-function loadImageFile(file)
-{
-    if (!file)
-        return;
-
-    console.log(
-        "Ouverture image :",
-        file.name
-    );
-
-    const url =
-        URL.createObjectURL(file);
-
-    const image =
-        new Image();
-
-    image.onload = () =>
-    {
-        URL.revokeObjectURL(url);
-
-        sourceImage = image;
-
-        selectedTiles.clear();
-
-        recomputeGrid();
-    };
-
-    image.onerror = () =>
-    {
-        URL.revokeObjectURL(url);
-
-        console.error(
-            "Impossible de charger l'image."
-        );
-    };
-
-    image.src = url;
-}
-
-
-// ============================================================
-// INDEX D'UNE CASE
-// ============================================================
-
-function tileIndexFromPoint(x, y)
-{
-    const col =
-        Math.floor(
-            x / tileSize
-        );
-
-    const row =
-        Math.floor(
-            y / tileSize
-        );
-
-    if (
-        col < 0 ||
-        row < 0 ||
-        col >= cols ||
-        row >= rows
-    )
-    {
-        return -1;
-    }
-
-    return row * cols + col;
-}
-
-
-// ============================================================
-// SÉLECTION D'UNE CASE
-// ============================================================
-
-function toggleTileAtPoint(x, y)
-{
-    const index =
-        tileIndexFromPoint(
-            x,
-            y
-        );
-
-    if (index < 0)
-        return;
-
-    if (selectedTiles.has(index))
-    {
-        selectedTiles.delete(index);
-    }
-    else
-    {
-        selectedTiles.add(index);
-    }
-
-    draw();
-
-    updateInfo();
-}
-
-
-// ============================================================
-// EFFACER
-// ============================================================
-
-function clearAll()
-{
-    selectedTiles.clear();
-
-    draw();
-
-    updateInfo();
-}
-
-
-// ============================================================
-// ZOOM
-// ============================================================
-
-function setZoom(value)
-{
-    zoomFactor =
-        Math.max(
-            0.2,
-            Math.min(
-                5.0,
-                value
-            )
-        );
-
-    updateCanvasSize();
-}
-
-
-// ============================================================
-// DÉCOMPRESSION LZFSE VIA MEMFS
-// ============================================================
 
 async function decompressLZFSE(
     compressed,
@@ -517,10 +370,6 @@ async function decompressLZFSE(
         "/grille_output.bin";
 
 
-    // --------------------------------------------------------
-    // Nettoyage fichiers précédents
-    // --------------------------------------------------------
-
     try
     {
         lzfseModule.FS.unlink(
@@ -530,6 +379,7 @@ async function decompressLZFSE(
     catch (e)
     {
     }
+
 
     try
     {
@@ -542,18 +392,16 @@ async function decompressLZFSE(
     }
 
 
-    // --------------------------------------------------------
-    // JavaScript -> MEMFS
-    // --------------------------------------------------------
-
     console.log(
         "Copie des données LZFSE dans MEMFS..."
     );
+
 
     lzfseModule.FS.writeFile(
         inputPath,
         compressed
     );
+
 
     console.log(
         "Fichier MEMFS créé :",
@@ -561,25 +409,16 @@ async function decompressLZFSE(
     );
 
 
-    // --------------------------------------------------------
-    // Appel C
-    //
-    // Le C connaît lui-même :
-    //
-    // /grille_input.lzfse
-    // /grille_output.bin
-    //
-    // On ne passe donc aucun char* depuis JS.
-    // --------------------------------------------------------
-
     console.log(
         "Appel decode_lzfse_memfs..."
     );
+
 
     const decodedSize =
         lzfseModule._decode_lzfse_memfs(
             originalSize
         );
+
 
     console.log(
         "Taille décompressée :",
@@ -595,14 +434,11 @@ async function decompressLZFSE(
     }
 
 
-    // --------------------------------------------------------
-    // MEMFS -> JavaScript
-    // --------------------------------------------------------
-
     const decoded =
         lzfseModule.FS.readFile(
             outputPath
         );
+
 
     console.log(
         "Archive décompressée :",
@@ -610,23 +446,6 @@ async function decompressLZFSE(
         "octets"
     );
 
-
-    if (
-        decoded.length !==
-        decodedSize
-    )
-    {
-        console.warn(
-            "Taille MEMFS différente :",
-            decoded.length,
-            decodedSize
-        );
-    }
-
-
-    // --------------------------------------------------------
-    // Nettoyage
-    // --------------------------------------------------------
 
     try
     {
@@ -638,13 +457,14 @@ async function decompressLZFSE(
     {
     }
 
+
     try
     {
         lzfseModule.FS.unlink(
             outputPath
         );
     }
-    catch (e) 
+    catch (e)
     {
     }
 
@@ -654,8 +474,9 @@ async function decompressLZFSE(
     );
 }
 
+
 // ============================================================
-// BINARY PLIST / NSKeyedArchiver
+// BINARY PLIST
 // ============================================================
 
 class BinaryPlistDecoder
@@ -663,6 +484,7 @@ class BinaryPlistDecoder
     constructor(bytes)
     {
         this.bytes = bytes;
+
         this.objects = [];
         this.offsets = [];
 
@@ -673,53 +495,62 @@ class BinaryPlistDecoder
         this.offsetTableOffset = 0;
     }
 
-    readUIntBE(offset, size)
+
+    readUIntBE(
+        offset,
+        size
+    )
     {
         let value = 0;
 
-        for (let i = 0; i < size; i++)
+        for (
+            let i = 0;
+            i < size;
+            i++
+        )
         {
             value =
                 value * 256 +
-                this.bytes[offset + i];
+                this.bytes[
+                    offset + i
+                ];
         }
 
         return value;
     }
 
-    readUIntLE(offset, size)
-    {
-        let value = 0;
-
-        for (let i = size - 1; i >= 0; i--)
-        {
-            value =
-                value * 256 +
-                this.bytes[offset + i];
-        }
-
-        return value;
-    }
 
     readDoubleBE(offset)
     {
         const buffer =
             this.bytes.buffer.slice(
-                this.bytes.byteOffset + offset,
-                this.bytes.byteOffset + offset + 8
+                this.bytes.byteOffset +
+                offset,
+                this.bytes.byteOffset +
+                offset +
+                8
             );
 
-        return new DataView(buffer).getFloat64(0, false);
+        return new DataView(
+            buffer
+        ).getFloat64(
+            0,
+            false
+        );
     }
+
 
     decode()
     {
-        if (this.bytes.length < 40)
+        if (
+            this.bytes.length < 40
+        )
         {
             throw new Error(
                 "Binary plist trop court."
             );
         }
+
 
         const magic =
             String.fromCharCode(
@@ -733,6 +564,7 @@ class BinaryPlistDecoder
                 this.bytes[7]
             );
 
+
         if (magic !== "bplist00")
         {
             throw new Error(
@@ -740,14 +572,22 @@ class BinaryPlistDecoder
             );
         }
 
+
         const trailer =
             this.bytes.length - 32;
 
+
         this.offsetIntSize =
-            this.bytes[trailer + 6];
+            this.bytes[
+                trailer + 6
+            ];
+
 
         this.objectRefSize =
-            this.bytes[trailer + 7];
+            this.bytes[
+                trailer + 7
+            ];
+
 
         this.numObjects =
             this.readUIntBE(
@@ -755,11 +595,13 @@ class BinaryPlistDecoder
                 8
             );
 
+
         this.topObject =
             this.readUIntBE(
                 trailer + 16,
                 8
             );
+
 
         this.offsetTableOffset =
             this.readUIntBE(
@@ -767,24 +609,37 @@ class BinaryPlistDecoder
                 8
             );
 
+
         console.log(
             "Binary plist :",
             {
-                offsetIntSize: this.offsetIntSize,
-                objectRefSize: this.objectRefSize,
-                numObjects: this.numObjects,
-                topObject: this.topObject,
-                offsetTableOffset: this.offsetTableOffset
+                offsetIntSize:
+                    this.offsetIntSize,
+
+                objectRefSize:
+                    this.objectRefSize,
+
+                numObjects:
+                    this.numObjects,
+
+                topObject:
+                    this.topObject,
+
+                offsetTableOffset:
+                    this.offsetTableOffset
             }
         );
 
+
         // ----------------------------------------------------
-        // Table des offsets
+        // Offsets
         // ----------------------------------------------------
 
-        this.offsets = new Array(
-            this.numObjects
-        );
+        this.offsets =
+            new Array(
+                this.numObjects
+            );
+
 
         for (
             let i = 0;
@@ -795,23 +650,29 @@ class BinaryPlistDecoder
             this.offsets[i] =
                 this.readUIntBE(
                     this.offsetTableOffset +
-                    i * this.offsetIntSize,
+                    i *
+                    this.offsetIntSize,
+
                     this.offsetIntSize
                 );
         }
 
+
         // ----------------------------------------------------
-        // Décodage des objets
+        // Objets
         // ----------------------------------------------------
 
-        this.objects = new Array(
-            this.numObjects
-        );
+        this.objects =
+            new Array(
+                this.numObjects
+            );
+
 
         return this.decodeObject(
             this.topObject
         );
     }
+
 
     decodeObject(ref)
     {
@@ -826,12 +687,14 @@ class BinaryPlistDecoder
             );
         }
 
+
         if (
             this.objects[ref] !== undefined
         )
         {
             return this.objects[ref];
         }
+
 
         const offset =
             this.offsets[ref];
@@ -845,110 +708,146 @@ class BinaryPlistDecoder
         const info =
             marker & 0x0F;
 
+
         let value;
+
 
         switch (type)
         {
             case 0x0:
+
                 value =
                     this.decodeSimple(
-                        info,
-                        offset
+                        info
                     );
+
                 break;
 
+
             case 0x1:
+
                 value =
                     this.decodeInteger(
                         info,
                         offset
                     );
+
                 break;
 
+
             case 0x2:
+
                 value =
                     this.decodeReal(
                         info,
                         offset
                     );
+
                 break;
 
+
             case 0x3:
+
                 value =
                     this.decodeDate(
                         info,
                         offset
                     );
+
                 break;
 
+
             case 0x4:
+
                 value =
                     this.decodeData(
                         info,
                         offset
                     );
+
                 break;
 
+
             case 0x5:
+
                 value =
                     this.decodeASCII(
                         info,
                         offset
                     );
+
                 break;
 
+
             case 0x6:
+
                 value =
                     this.decodeUTF16(
                         info,
                         offset
                     );
+
                 break;
 
+
             case 0x8:
+
                 value =
                     this.decodeUID(
                         info,
                         offset
                     );
+
                 break;
 
+
             case 0xA:
+
                 value =
                     this.decodeArray(
                         info,
                         offset
                     );
+
                 break;
 
+
             case 0xD:
+
                 value =
                     this.decodeDictionary(
                         info,
                         offset
                     );
+
                 break;
+
 
             default:
 
                 throw new Error(
                     "Type plist inconnu : 0x" +
-                    type.toString(16) +
-                    " objet " +
-                    ref +
-                    " offset " +
-                    offset
+                    type.toString(16)
                 );
         }
 
-        this.objects[ref] = value;
+
+        this.objects[ref] =
+            value;
+
 
         return value;
     }
 
-    decodeLength(info, offset)
+
+    decodeLength(
+        info,
+        offset
+    )
     {
-        if (info < 0x0F)
+        if (
+            info < 0x0F
+        )
         {
             return {
                 length: info,
@@ -956,14 +855,19 @@ class BinaryPlistDecoder
             };
         }
 
+
         const marker =
-            this.bytes[offset + 1];
+            this.bytes[
+                offset + 1
+            ];
+
 
         const type =
             marker >> 4;
 
         const integerInfo =
             marker & 0x0F;
+
 
         if (type !== 0x1)
         {
@@ -972,8 +876,10 @@ class BinaryPlistDecoder
             );
         }
 
+
         const byteCount =
             1 << integerInfo;
+
 
         const length =
             this.readUIntBE(
@@ -981,13 +887,18 @@ class BinaryPlistDecoder
                 byteCount
             );
 
+
         return {
             length: length,
-            offset: offset + 2 + byteCount
+            offset:
+                offset +
+                2 +
+                byteCount
         };
     }
 
-    decodeSimple(info, offset)
+
+    decodeSimple(info)
     {
         switch (info)
         {
@@ -1001,30 +912,38 @@ class BinaryPlistDecoder
                 return true;
 
             default:
+
                 return {
                     plistSimple: info
                 };
         }
     }
 
-    decodeInteger(info, offset)
+
+    decodeInteger(
+        info,
+        offset
+    )
     {
         const byteCount =
             1 << info;
 
-        const value =
-            this.readUIntBE(
-                offset + 1,
-                byteCount
-            );
 
-        return value;
+        return this.readUIntBE(
+            offset + 1,
+            byteCount
+        );
     }
 
-    decodeReal(info, offset)
+
+    decodeReal(
+        info,
+        offset
+    )
     {
         const byteCount =
             1 << info;
+
 
         if (byteCount === 4)
         {
@@ -1032,13 +951,20 @@ class BinaryPlistDecoder
                 this.bytes.buffer.slice(
                     this.bytes.byteOffset +
                     offset + 1,
+
                     this.bytes.byteOffset +
                     offset + 5
                 );
 
-            return new DataView(buffer)
-                .getFloat32(0, false);
+
+            return new DataView(
+                buffer
+            ).getFloat32(
+                0,
+                false
+            );
         }
+
 
         if (byteCount === 8)
         {
@@ -1047,12 +973,17 @@ class BinaryPlistDecoder
             );
         }
 
+
         throw new Error(
             "REAL plist non supporté."
         );
     }
 
-    decodeDate(info, offset)
+
+    decodeDate(
+        info,
+        offset
+    )
     {
         if (info !== 0x3)
         {
@@ -1061,12 +992,17 @@ class BinaryPlistDecoder
             );
         }
 
+
         return this.readDoubleBE(
             offset + 1
         );
     }
 
-    decodeData(info, offset)
+
+    decodeData(
+        info,
+        offset
+    )
     {
         const result =
             this.decodeLength(
@@ -1074,19 +1010,19 @@ class BinaryPlistDecoder
                 offset
             );
 
-        const start =
-            result.offset;
-
-        const end =
-            start + result.length;
 
         return this.bytes.slice(
-            start,
-            end
+            result.offset,
+            result.offset +
+            result.length
         );
     }
 
-    decodeASCII(info, offset)
+
+    decodeASCII(
+        info,
+        offset
+    )
     {
         const result =
             this.decodeLength(
@@ -1094,29 +1030,32 @@ class BinaryPlistDecoder
                 offset
             );
 
-        const start =
-            result.offset;
-
-        const end =
-            start + result.length;
 
         let text = "";
 
+
         for (
-            let i = start;
-            i < end;
+            let i = 0;
+            i < result.length;
             i++
         )
         {
             text += String.fromCharCode(
-                this.bytes[i]
+                this.bytes[
+                    result.offset + i
+                ]
             );
         }
+
 
         return text;
     }
 
-    decodeUTF16(info, offset)
+
+    decodeUTF16(
+        info,
+        offset
+    )
     {
         const result =
             this.decodeLength(
@@ -1124,41 +1063,47 @@ class BinaryPlistDecoder
                 offset
             );
 
-        const start =
-            result.offset;
-
-        const count =
-            result.length;
-
-        const end =
-            start + count * 2;
 
         let text = "";
 
+
         for (
-            let i = start;
-            i < end;
-            i += 2
+            let i = 0;
+            i < result.length;
+            i++
         )
         {
+            const p =
+                result.offset +
+                i * 2;
+
+
             const code =
-                (this.bytes[i] << 8) |
-                this.bytes[i + 1];
+                (this.bytes[p] << 8) |
+                this.bytes[p + 1];
+
 
             text += String.fromCharCode(
                 code
             );
         }
 
+
         return text;
     }
 
-    decodeUID(info, offset)
+
+    decodeUID(
+        info,
+        offset
+    )
     {
         const length =
             info + 1;
 
+
         let value = 0;
+
 
         for (
             let i = 0;
@@ -1168,15 +1113,22 @@ class BinaryPlistDecoder
         {
             value =
                 value * 256 +
-                this.bytes[offset + 1 + i];
+                this.bytes[
+                    offset + 1 + i
+                ];
         }
+
 
         return {
             uid: value
         };
     }
 
-    decodeArray(info, offset)
+
+    decodeArray(
+        info,
+        offset
+    )
     {
         const result =
             this.decodeLength(
@@ -1184,18 +1136,20 @@ class BinaryPlistDecoder
                 offset
             );
 
-        const count =
-            result.length;
 
         let pos =
             result.offset;
 
+
         const array =
-            new Array(count);
+            new Array(
+                result.length
+            );
+
 
         for (
             let i = 0;
-            i < count;
+            i < result.length;
             i++
         )
         {
@@ -1205,17 +1159,26 @@ class BinaryPlistDecoder
                     this.objectRefSize
                 );
 
+
             pos +=
                 this.objectRefSize;
 
+
             array[i] =
-                this.decodeObject(ref);
+                this.decodeObject(
+                    ref
+                );
         }
+
 
         return array;
     }
 
-    decodeDictionary(info, offset)
+
+    decodeDictionary(
+        info,
+        offset
+    )
     {
         const result =
             this.decodeLength(
@@ -1223,17 +1186,21 @@ class BinaryPlistDecoder
                 offset
             );
 
+
         const count =
             result.length;
 
+
         let pos =
             result.offset;
+
 
         const keyRefs =
             new Array(count);
 
         const valueRefs =
             new Array(count);
+
 
         for (
             let i = 0;
@@ -1251,6 +1218,7 @@ class BinaryPlistDecoder
                 this.objectRefSize;
         }
 
+
         for (
             let i = 0;
             i < count;
@@ -1267,7 +1235,9 @@ class BinaryPlistDecoder
                 this.objectRefSize;
         }
 
+
         const dictionary = {};
+
 
         for (
             let i = 0;
@@ -1280,14 +1250,17 @@ class BinaryPlistDecoder
                     keyRefs[i]
                 );
 
+
             const value =
                 this.decodeObject(
                     valueRefs[i]
                 );
 
+
             dictionary[key] =
                 value;
         }
+
 
         return dictionary;
     }
@@ -1295,7 +1268,7 @@ class BinaryPlistDecoder
 
 
 // ============================================================
-// OUTILS NSKEYEDARCHIVER
+// NSKEYEDARCHIVER
 // ============================================================
 
 function isUID(value)
@@ -1311,114 +1284,27 @@ function isUID(value)
 }
 
 
-function findArchiveRoot(plist)
-{
-    console.log(
-        "Recherche de $top..."
-    );
-
-    if (
-        !plist ||
-        typeof plist !== "object"
-    )
-    {
-        throw new Error(
-            "Plist racine invalide."
-        );
-    }
-
-    console.log(
-        "Clés plist racine :",
-        Object.keys(plist)
-    );
-
-    const top =
-        plist["$top"];
-
-    if (!top)
-    {
-        throw new Error(
-            "$top absent du NSKeyedArchiver."
-        );
-    }
-
-    console.log(
-        "$top :",
-        top
-    );
-
-    return top;
-}
-
-
-function inspectKeyedArchive(bytes)
-{
-    console.log(
-        "================================"
-    );
-
-    console.log(
-        "DECODAGE BINARY PLIST"
-    );
-
-    console.log(
-        "Taille :",
-        bytes.length
-    );
-
-    const decoder =
-        new BinaryPlistDecoder(bytes);
-
-    const plist =
-        decoder.decode();
-
-    console.log(
-        "Plist décodé :",
-        plist
-    );
-
-    console.log(
-        "Clés racine :",
-        Object.keys(plist)
-    );
-
-    const top =
-        findArchiveRoot(plist);
-
-    console.log(
-        "$top décodé :",
-        top
-    );
-
-    console.log(
-        "================================"
-    );
-
-    return {
-        plist: plist,
-        top: top,
-        decoder: decoder
-    };
-}
-
-// ============================================================
-// NSKeyedArchiver RESOLVER
-// ============================================================
-
 class KeyedArchiveResolver
 {
     constructor(plist)
     {
-        this.plist = plist;
+        this.plist =
+            plist;
+
         this.objects =
             plist["$objects"];
 
-        if (!Array.isArray(this.objects))
+        if (
+            !Array.isArray(
+                this.objects
+            )
+        )
         {
             throw new Error(
                 "$objects absent ou invalide."
             );
         }
+
 
         this.cache =
             new Map();
@@ -1435,10 +1321,10 @@ class KeyedArchiveResolver
             return uidObject;
         }
 
-        const index =
-            uidObject.uid;
 
-        return this.resolveIndex(index);
+        return this.resolveIndex(
+            uidObject.uid
+        );
     }
 
 
@@ -1455,29 +1341,30 @@ class KeyedArchiveResolver
             );
         }
 
-        if (this.cache.has(index))
-        {
-            return this.cache.get(index);
-        }
 
-        if (this.resolving.has(index))
+        if (
+            this.cache.has(index)
+        )
         {
-            console.warn(
-                "Référence circulaire UID :",
+            return this.cache.get(
                 index
             );
+        }
 
+
+        if (
+            this.resolving.has(index)
+        )
+        {
             return {
                 "$circularUID": index
             };
         }
 
+
         const object =
             this.objects[index];
 
-        // ----------------------------------------------------
-        // Objet nul NSKeyedArchiver
-        // ----------------------------------------------------
 
         if (
             object === "$null" ||
@@ -1492,9 +1379,14 @@ class KeyedArchiveResolver
             return null;
         }
 
-        this.resolving.add(index);
+
+        this.resolving.add(
+            index
+        );
+
 
         let result;
+
 
         try
         {
@@ -1505,13 +1397,17 @@ class KeyedArchiveResolver
         }
         finally
         {
-            this.resolving.delete(index);
+            this.resolving.delete(
+                index
+            );
         }
+
 
         this.cache.set(
             index,
             result
         );
+
 
         return result;
     }
@@ -1519,10 +1415,6 @@ class KeyedArchiveResolver
 
     resolveObject(object)
     {
-        // ----------------------------------------------------
-        // UID
-        // ----------------------------------------------------
-
         if (isUID(object))
         {
             return this.resolveIndex(
@@ -1530,10 +1422,6 @@ class KeyedArchiveResolver
             );
         }
 
-
-        // ----------------------------------------------------
-        // Tableau
-        // ----------------------------------------------------
 
         if (Array.isArray(object))
         {
@@ -1546,10 +1434,6 @@ class KeyedArchiveResolver
         }
 
 
-        // ----------------------------------------------------
-        // NSData / primitive / NSString
-        // ----------------------------------------------------
-
         if (
             object === null ||
             typeof object !== "object"
@@ -1560,20 +1444,117 @@ class KeyedArchiveResolver
 
 
         // ----------------------------------------------------
-        // Dictionnaire
+        // NSData
+        // ----------------------------------------------------
+
+        if (
+            object["NS.data"] instanceof
+            Uint8Array
+        )
+        {
+            return object["NS.data"];
+        }
+
+
+        // ----------------------------------------------------
+        // NSIndexSet
+        // ----------------------------------------------------
+
+        if (
+            object["NSRangeCount"] !==
+            undefined &&
+            object["NSRangeData"] !==
+            undefined
+        )
+        {
+            return {
+                type: "NSIndexSet",
+
+                count:
+                    object["NSRangeCount"],
+
+                rangeData:
+                    this.resolveObject(
+                        object["NSRangeData"]
+                    )
+            };
+        }
+
+
+        // ----------------------------------------------------
+        // NSDictionary NSKeyedArchiver
+        // ----------------------------------------------------
+
+        if (
+            Array.isArray(
+                object["NS.keys"]
+            ) &&
+            Array.isArray(
+                object["NS.objects"]
+            )
+        )
+        {
+            const dictionary = {};
+
+
+            const keys =
+                object["NS.keys"];
+
+            const values =
+                object["NS.objects"];
+
+
+            for (
+                let i = 0;
+                i < keys.length;
+                i++
+            )
+            {
+                const key =
+                    this.resolveObject(
+                        keys[i]
+                    );
+
+                const value =
+                    this.resolveObject(
+                        values[i]
+                    );
+
+
+                dictionary[key] =
+                    value;
+            }
+
+
+            return dictionary;
+        }
+
+
+        // ----------------------------------------------------
+        // Dictionnaire classique
         // ----------------------------------------------------
 
         const result = {};
 
+
         for (
-            const key of Object.keys(object)
+            const key of Object.keys(
+                object
+            )
         )
         {
+            if (key === "$class")
+            {
+                continue;
+            }
+
+
             result[key] =
                 this.resolveObject(
                     object[key]
                 );
         }
+
 
         return result;
     }
@@ -1584,6 +1565,7 @@ class KeyedArchiveResolver
         const top =
             this.plist["$top"];
 
+
         if (!top)
         {
             throw new Error(
@@ -1591,8 +1573,10 @@ class KeyedArchiveResolver
             );
         }
 
+
         const rootUID =
             top["root"];
+
 
         if (!rootUID)
         {
@@ -1601,96 +1585,190 @@ class KeyedArchiveResolver
             );
         }
 
+
         console.log(
             "UID racine :",
             rootUID.uid
         );
 
+
         return this.resolveUID(
             rootUID
         );
     }
-
-
-    dumpObject(index, depth = 0)
-    {
-        const indent =
-            " ".repeat(depth * 2);
-
-        if (
-            index < 0 ||
-            index >= this.objects.length
-        )
-        {
-            console.log(
-                indent +
-                "UID invalide " +
-                index
-            );
-
-            return;
-        }
-
-        const object =
-            this.objects[index];
-
-        console.log(
-            indent +
-            "UID[" +
-            index +
-            "] :",
-            object
-        );
-
-        if (
-            object &&
-            typeof object === "object" &&
-            !Array.isArray(object)
-        )
-        {
-            if (object["$class"])
-            {
-                console.log(
-                    indent +
-                    "  $class :",
-                    object["$class"]
-                );
-            }
-
-            for (
-                const key of Object.keys(object)
-            )
-            {
-                if (
-                    key === "$class"
-                )
-                {
-                    continue;
-                }
-
-                const value =
-                    object[key];
-
-                if (isUID(value))
-                {
-                    console.log(
-                        indent +
-                        "  " +
-                        key +
-                        " -> UID " +
-                        value.uid
-                    );
-                }
-            }
-        }
-    }
 }
 
+
 // ============================================================
-// LECTURE FICHIER .GRILLE
+// DECODAGE ARCHIVE
 // ============================================================
 
-async function loadGrilleFile(file)
+function decodeGrilleArchive(
+    decoded
+)
+{
+    console.log(
+        "================================"
+    );
+
+    console.log(
+        "DECODAGE BINARY PLIST"
+    );
+
+    console.log(
+        "Taille :",
+        decoded.length
+    );
+
+
+    const decoder =
+        new BinaryPlistDecoder(
+            decoded
+        );
+
+
+    const plist =
+        decoder.decode();
+
+
+    window.lastPlist =
+        plist;
+
+    window.lastPlistDecoder =
+        decoder;
+
+
+    console.log(
+        "Plist décodé :",
+        plist
+    );
+
+
+    console.log(
+        "Clés plist racine :",
+        Object.keys(plist)
+    );
+
+
+    if (
+        plist["$archiver"] !==
+        "NSKeyedArchiver"
+    )
+    {
+        throw new Error(
+            "Archive NSKeyedArchiver attendue."
+        );
+    }
+
+
+    const resolver =
+        new KeyedArchiveResolver(
+            plist
+        );
+
+
+    window.lastArchiveResolver =
+        resolver;
+
+
+    const root =
+        resolver.root();
+
+
+    window.lastArchiveRoot =
+        root;
+
+
+    console.log(
+        "OBJET RACINE NSKEYEDARCHIVER :",
+        root
+    );
+
+
+    return root;
+}
+
+
+// ============================================================
+// EXTRACTION DES DONNEES GRILLE
+// ============================================================
+
+function extractGrilleData(
+    root
+)
+{
+    if (
+        !root ||
+        typeof root !== "object"
+    )
+    {
+        throw new Error(
+            "Racine de grille invalide."
+        );
+    }
+
+
+    console.log(
+        "Clés objet grille :",
+        Object.keys(root)
+    );
+
+
+    const grilleData =
+        {};
+
+
+    const names = [
+        "GRILLE",
+        "COULEUR",
+        "PALETTE",
+        "ENCOURS",
+        "TILESIZE",
+        "TILEORIGIN"
+    ];
+
+
+    for (
+        const name of names
+    )
+    {
+        if (
+            Object.prototype.hasOwnProperty.call(
+                root,
+                name
+            )
+        )
+        {
+            grilleData[name] =
+                root[name];
+
+            console.log(
+                name,
+                ":",
+                root[name]
+            );
+        }
+        else
+        {
+            console.warn(
+                name +
+                " absent de l'archive."
+            );
+        }
+    }
+
+
+    return grilleData;
+}
+
+
+// ============================================================
+// OUVERTURE .GRILLE
+// ============================================================
+
+async function loadGrilleFile(
+    file
+)
 {
     console.log(
         "==============================="
@@ -1728,15 +1806,14 @@ async function loadGrilleFile(file)
     }
 
 
-    // --------------------------------------------------------
-    // Lecture complète du fichier
-    // --------------------------------------------------------
-
     const buffer =
         await file.arrayBuffer();
 
+
     const bytes =
-        new Uint8Array(buffer);
+        new Uint8Array(
+            buffer
+        );
 
 
     console.log(
@@ -1746,7 +1823,9 @@ async function loadGrilleFile(file)
     );
 
 
-    if (bytes.length < 8)
+    if (
+        bytes.length < 8
+    )
     {
         throw new Error(
             "Fichier .grille trop court."
@@ -1756,13 +1835,12 @@ async function loadGrilleFile(file)
 
     // --------------------------------------------------------
     // Taille originale
-    //
-    // Les 8 premiers octets sont un uint64
-    // little endian.
     // --------------------------------------------------------
 
     const view =
-        new DataView(buffer);
+        new DataView(
+            buffer
+        );
 
 
     const originalSizeBig =
@@ -1798,11 +1876,13 @@ async function loadGrilleFile(file)
 
 
     // --------------------------------------------------------
-    // Données compressées
+    // Données LZFSE
     // --------------------------------------------------------
 
     const compressed =
-        bytes.subarray(8);
+        bytes.subarray(
+            8
+        );
 
 
     console.log(
@@ -1811,11 +1891,9 @@ async function loadGrilleFile(file)
     );
 
 
-    // --------------------------------------------------------
-    // Signature LZFSE
-    // --------------------------------------------------------
-
-    if (compressed.length >= 4)
+    if (
+        compressed.length >= 4
+    )
     {
         const signature =
             String.fromCharCode(
@@ -1832,7 +1910,9 @@ async function loadGrilleFile(file)
         );
 
 
-        if (signature !== "bvx2")
+        if (
+            signature !== "bvx2"
+        )
         {
             console.warn(
                 "Signature LZFSE inattendue :",
@@ -1860,670 +1940,1088 @@ async function loadGrilleFile(file)
     );
 
 
-    // --------------------------------------------------------
-    // Conservation temporaire
-    // --------------------------------------------------------
-
-   window.lastDecodedGrille =
-    decoded;
-
-console.log(
-    "window.lastDecodedGrille disponible :",
-    decoded.length,
-    "octets"
-);
-
-
-// ============================================================
-// TEST BINARY PLIST
-// ============================================================
-
-try
-{
-    try
-{
-    const archive =
-        inspectKeyedArchive(
-            decoded
-        );
-
-    window.lastPlist =
-        archive.plist;
-
-    window.lastPlistDecoder =
-        archive.decoder;
-
-
-    // ========================================================
-    // NSKeyedArchiver
-    // ========================================================
-
-    const resolver =
-        new KeyedArchiveResolver(
-            archive.plist
-        );
-
-    window.lastArchiveResolver =
-        resolver;
-
-
-    console.log(
-        "================================"
-    );
-
-    console.log(
-        "NSKEYEDARCHIVER"
-    );
-
-    console.log(
-        "Nombre d'objets :",
-        archive.plist["$objects"].length
-    );
+    window.lastDecodedGrille =
+        decoded;
 
 
     // --------------------------------------------------------
-    // Affichage de quelques objets
-    // --------------------------------------------------------
-
-    const objects =
-        archive.plist["$objects"];
-
-    for (
-        let i = 0;
-        i < Math.min(
-            objects.length,
-            20
-        );
-        i++
-    )
-    {
-        resolver.dumpObject(
-            i
-        );
-    }
-
-
-    // --------------------------------------------------------
-    // Résolution de la racine
+    // Binary plist + NSKeyedArchiver
     // --------------------------------------------------------
 
     const root =
-        resolver.root();
+        decodeGrilleArchive(
+            decoded
+        );
 
-    window.lastArchiveRoot =
-        root;
 
+    const grilleData =
+        extractGrilleData(
+            root
+        );
+
+
+    window.lastGrilleArchive =
+        grilleData;
+
+
+    // --------------------------------------------------------
+    // Informations
+    // --------------------------------------------------------
 
     console.log(
         "================================"
     );
 
     console.log(
-        "OBJET RACINE NSKEYEDARCHIVER :"
+        "ARCHIVE GRILLE"
     );
 
     console.log(
-        root
+        "GRILLE :",
+        grilleData.GRILLE
     );
+
+    console.log(
+        "COULEUR :",
+        grilleData.COULEUR
+    );
+
+    console.log(
+        "PALETTE :",
+        grilleData.PALETTE
+    );
+
+    console.log(
+        "ENCOURS :",
+        grilleData.ENCOURS
+    );
+
+    console.log(
+        "TILESIZE :",
+        grilleData.TILESIZE
+    );
+
+    console.log(
+        "TILEORIGIN :",
+        grilleData.TILEORIGIN
+    );
+
+    console.log(
+        "================================"
+    );
+
+
+    // --------------------------------------------------------
+    // Chargement des images
+    // --------------------------------------------------------
+
+    if (
+        grilleData.GRILLE instanceof
+        Uint8Array
+    )
+    {
+        sourceImage =
+            await imageFromBytes(
+                grilleData.GRILLE
+            );
+    }
 
 
     if (
-        root &&
-        typeof root === "object"
+        grilleData.COULEUR instanceof
+        Uint8Array
     )
     {
-        console.log(
-            "Clés racine de l'objet archivé :",
-            Object.keys(root)
-        );
+        colorImage =
+            await imageFromBytes(
+                grilleData.COULEUR
+            );
     }
+
+
+    if (
+        grilleData.PALETTE instanceof
+        Uint8Array
+    )
+    {
+        paletteImage =
+            await imageFromBytes(
+                grilleData.PALETTE
+            );
+    }
+
+
+    // --------------------------------------------------------
+    // Taille des cases
+    // --------------------------------------------------------
+
+    if (
+        typeof grilleData.TILESIZE ===
+        "number"
+    )
+    {
+        // Le fichier Mac stocke la taille historique.
+        // L'interface iPad travaille avec une taille doublée.
+
+        tileSize =
+            Math.max(
+                2,
+                grilleData.TILESIZE * 2
+            );
+
+
+        const tileSizeInput =
+            document.getElementById(
+                "tileSize"
+            );
+
+
+        if (tileSizeInput)
+        {
+            tileSizeInput.value =
+                tileSize;
+        }
+    }
+
+
+    // --------------------------------------------------------
+    // Cases cochées
+    // --------------------------------------------------------
+
+    selectedTiles =
+        decodeNSIndexSet(
+            grilleData.ENCOURS
+        );
+
+
+    console.log(
+        "Cases sélectionnées :",
+        selectedTiles.size
+    );
+
+
+    // --------------------------------------------------------
+    // Affichage
+    // --------------------------------------------------------
+
+    recomputeGrid();
+
+    draw();
+
+
+    const info =
+        document.getElementById(
+            "info"
+        );
+
+
+    if (info)
+    {
+        info.textContent =
+            sourceImage
+                ? sourceImage.width +
+                  " × " +
+                  sourceImage.height +
+                  " — " +
+                  cols +
+                  " × " +
+                  rows
+                : "Grille chargée";
+    }
+
+
+    console.log(
+        "GRILLE CHARGÉE"
+    );
 
 
     console.log(
         "================================"
     );
-
-    alert(
-        "NSKeyedArchiver décodé.\n\n" +
-        "Objets : " +
-        objects.length
-    );
-}
-catch (error)
-{
-    console.error(
-        "ERREUR NSKEYEDARCHIVER :",
-        error
-    );
-
-    alert(
-        "Erreur NSKeyedArchiver :\n" +
-        error.message
-    );
-}
-
-    window.lastPlist =
-        archive.plist;
-
-    window.lastArchiveTop =
-        archive.top;
-
-    window.lastPlistDecoder =
-        archive.decoder;
-
-    console.log(
-        "Binary plist correctement décodé."
-    );
-
-    console.log(
-        "Objet $top :",
-        archive.top
-    );
-
-    alert(
-        "Binary plist décodé.\n\n" +
-        "Clés : " +
-        Object.keys(
-            archive.plist
-        ).join(", ")
-    );
-}
-catch (error)
-{
-    console.error(
-        "ERREUR DECODAGE BINARY PLIST :",
-        error
-    );
-
-    alert(
-        "Erreur décodage binary plist :\n" +
-        error.message
-    );
-}
-
-
-    // --------------------------------------------------------
-    // Affichage des premiers octets
-    // --------------------------------------------------------
-
-    console.log(
-        "Premiers octets de l'archive :",
-        Array.from(
-            decoded.subarray(
-                0,
-                Math.min(
-                    32,
-                    decoded.length
-                )
-            )
-        )
-    );
-
-
-    // --------------------------------------------------------
-    // Pour l'instant :
-    // LZFSE est terminé.
-    //
-    // Étape suivante :
-    // décodage de NSKeyedArchiver.
-    // --------------------------------------------------------
-
-    alert(
-        "Décompression LZFSE réussie : " +
-        decoded.length +
-        " octets."
-    );
 }
 
 
 // ============================================================
-// DOM
+// NSData -> IMAGE
 // ============================================================
 
-document.addEventListener(
-    "DOMContentLoaded",
-    async () =>
+function imageFromBytes(
+    bytes
+)
 {
-    // --------------------------------------------------------
-    // Canvas
-    // --------------------------------------------------------
-
-    canvas =
-        document.getElementById(
-            "canvas"
-        );
-
-
-    if (!canvas)
-    {
-        console.error(
-            "Canvas #canvas introuvable !"
-        );
-
-        return;
-    }
+    return new Promise(
+        function (resolve, reject)
+        {
+            const blob =
+                new Blob(
+                    [bytes],
+                    {
+                        type: "image/png"
+                    }
+                );
 
 
-    ctx =
-        canvas.getContext(
-            "2d"
-        );
+            const url =
+                URL.createObjectURL(
+                    blob
+                );
 
 
-    if (!ctx)
-    {
-        console.error(
-            "Impossible de créer le contexte 2D."
-        );
-
-        return;
-    }
+            const image =
+                new Image();
 
 
-    // --------------------------------------------------------
-    // Éléments HTML
-    // --------------------------------------------------------
-
-    const imageInput =
-        document.getElementById(
-            "imageInput"
-        );
-
-
-    const grilleInput =
-        document.getElementById(
-            "grilleInput"
-        );
-
-
-    const openButton =
-        document.getElementById(
-            "openButton"
-        );
-
-
-    const openGrilleButton =
-        document.getElementById(
-            "openGrilleButton"
-        );
-
-
-    const clearButton =
-        document.getElementById(
-            "clearButton"
-        );
-
-
-    const tileSizeInput =
-        document.getElementById(
-            "tileSize"
-        );
-
-
-    // --------------------------------------------------------
-    // OUVRIR IMAGE
-    // --------------------------------------------------------
-
-    if (openButton)
-    {
-        openButton.addEventListener(
-            "click",
-            () =>
-            {
-                imageInput.click();
-            }
-        );
-    }
-
-
-    if (imageInput)
-    {
-        imageInput.addEventListener(
-            "change",
-            event =>
-            {
-                const file =
-                    event.target.files[0];
-
-
-                if (file)
+            image.onload =
+                function ()
                 {
-                    loadImageFile(
-                        file
+                    URL.revokeObjectURL(
+                        url
                     );
-                }
-            }
-        );
-    }
+
+                    resolve(
+                        image
+                    );
+                };
 
 
-    // --------------------------------------------------------
-    // OUVRIR GRILLE
-    // --------------------------------------------------------
-
-    if (openGrilleButton)
-    {
-        openGrilleButton.addEventListener(
-            "click",
-            () =>
-            {
-                grilleInput.click();
-            }
-        );
-    }
-
-
-    if (grilleInput)
-    {
-        grilleInput.addEventListener(
-            "change",
-            async event =>
-            {
-                const file =
-                    event.target.files[0];
-
-
-                if (!file)
-                    return;
-
-
-                try
+            image.onerror =
+                function ()
                 {
-                    await loadGrilleFile(
-                        file
-                    );
-                }
-                catch (error)
-                {
-                    console.error(
-                        "Erreur lecture grille :",
-                        error
+                    URL.revokeObjectURL(
+                        url
                     );
 
-
-                    alert(
-                        "Erreur lecture grille :\n\n" +
-                        error.message
-                    );
-                }
-            }
-        );
-    }
-
-
-    // --------------------------------------------------------
-    // EFFACER
-    // --------------------------------------------------------
-
-    if (clearButton)
-    {
-        clearButton.addEventListener(
-            "click",
-            clearAll
-        );
-    }
-
-
-    // --------------------------------------------------------
-    // TAILLE DES CASES
-    // --------------------------------------------------------
-
-    if (tileSizeInput)
-    {
-        tileSizeInput.addEventListener(
-            "change",
-            () =>
-            {
-                let value =
-                    parseInt(
-                        tileSizeInput.value,
-                        10
-                    );
-
-
-                if (
-                    !Number.isFinite(
-                        value
-                    )
-                )
-                {
-                    value = 20;
-                }
-
-
-                value =
-                    Math.max(
-                        2,
-                        Math.min(
-                            100,
-                            value
+                    reject(
+                        new Error(
+                            "Impossible de décoder l'image PNG."
                         )
                     );
+                };
 
 
-                tileSize =
-                    value;
+            image.src =
+                url;
+        }
+    );
+}
 
 
-                tileSizeInput.value =
-                    value;
+// ============================================================
+// NSINDEXSET
+// ============================================================
+
+function decodeNSIndexSet(
+    value
+)
+{
+    const result =
+        new Set();
 
 
-                if (sourceImage)
-                {
-                    recomputeGrid();
-                }
-            }
-        );
+    if (!value)
+    {
+        return result;
     }
 
 
     // --------------------------------------------------------
-    // TOUCH START
+    // Cas futur : tableau d'indices
     // --------------------------------------------------------
 
-    canvas.addEventListener(
-        "touchstart",
-        event =>
+    if (Array.isArray(value))
+    {
+        for (
+            const index of value
+        )
         {
-            event.preventDefault();
-
-
-            // Deux doigts = début du zoom
-
             if (
-                event.touches.length === 2
-            )
-            {
-                lastTouchDistance =
-                    touchDistance(
-                        event.touches[0],
-                        event.touches[1]
-                    );
-
-                isDragging = false;
-
-                return;
-            }
-
-
-            // Un doigt
-
-            if (
-                event.touches.length === 1
-            )
-            {
-                const touch =
-                    event.touches[0];
-
-
-                touchStartX =
-                    touch.clientX;
-
-
-                touchStartY =
-                    touch.clientY;
-
-
-                isDragging = false;
-            }
-        },
-        {
-            passive: false
-        }
-    );
-
-
-    // --------------------------------------------------------
-    // TOUCH MOVE
-    // --------------------------------------------------------
-
-    canvas.addEventListener(
-        "touchmove",
-        event =>
-        {
-            event.preventDefault();
-
-
-            // ------------------------------------------------
-            // Deux doigts = zoom
-            // ------------------------------------------------
-
-            if (
-                event.touches.length === 2
-            )
-            {
-                const distance =
-                    touchDistance(
-                        event.touches[0],
-                        event.touches[1]
-                    );
-
-
-                if (
-                    lastTouchDistance !== null
+                Number.isInteger(
+                    index
                 )
-                {
-                    const ratio =
-                        distance /
-                        lastTouchDistance;
-
-
-                    setZoom(
-                        zoomFactor *
-                        ratio
-                    );
-                }
-
-
-                lastTouchDistance =
-                    distance;
-
-
-                return;
-            }
-
-
-            // ------------------------------------------------
-            // Un doigt
-            // ------------------------------------------------
-
-            if (
-                event.touches.length === 1
             )
             {
-                const touch =
-                    event.touches[0];
-
-
-                const dx =
-                    touch.clientX -
-                    touchStartX;
-
-
-                const dy =
-                    touch.clientY -
-                    touchStartY;
-
-
-                if (
-                    Math.abs(dx) > 5 ||
-                    Math.abs(dy) > 5
-                )
-                {
-                    isDragging = true;
-                }
-            }
-        },
-        {
-            passive: false
-        }
-    );
-
-
-    // --------------------------------------------------------
-    // TOUCH END
-    // --------------------------------------------------------
-
-    canvas.addEventListener(
-        "touchend",
-        event =>
-        {
-            event.preventDefault();
-
-
-            if (
-                event.touches.length < 2
-            )
-            {
-                lastTouchDistance =
-                    null;
-            }
-
-
-            if (
-                event.changedTouches.length === 1 &&
-                !isDragging
-            )
-            {
-                const touch =
-                    event.changedTouches[0];
-
-
-                const point =
-                    canvasPointFromEvent(
-                        touch
-                    );
-
-
-                toggleTileAtPoint(
-                    point.x,
-                    point.y
+                result.add(
+                    index
                 );
             }
-
-
-            isDragging = false;
-        },
-        {
-            passive: false
         }
+
+
+        return result;
+    }
+
+
+    if (
+        value.type !==
+        "NSIndexSet"
+    )
+    {
+        return result;
+    }
+
+
+    console.log(
+        "NSIndexSet count :",
+        value.count
+    );
+
+
+    const data =
+        value.rangeData;
+
+
+    if (
+        !(data instanceof Uint8Array)
+    )
+    {
+        console.warn(
+            "NSRangeData absent."
+        );
+
+        return result;
+    }
+
+
+    console.log(
+        "NSRangeData taille :",
+        data.length
+    );
+
+
+    /*
+     * NSKeyedArchiver encode NSIndexSet sous forme :
+     *
+     * NSRangeCount
+     * NSRangeData
+     *
+     * NSRangeData contient les NSRange.
+     *
+     * Sur 64 bits :
+     *
+     * location : uint64
+     * length   : uint64
+     *
+     * Les valeurs sont little-endian.
+     */
+
+
+    if (
+        data.length % 16 !== 0
+    )
+    {
+        console.warn(
+            "Taille NSRangeData inattendue :",
+            data.length
+        );
+    }
+
+
+    const rangeCount =
+        Math.floor(
+            data.length / 16
+        );
+
+
+    const view =
+        new DataView(
+            data.buffer,
+            data.byteOffset,
+            data.byteLength
+        );
+
+
+    for (
+        let i = 0;
+        i < rangeCount;
+        i++
+    )
+    {
+        const offset =
+            i * 16;
+
+
+        const location =
+            Number(
+                view.getBigUint64(
+                    offset,
+                    true
+                )
+            );
+
+
+        const length =
+            Number(
+                view.getBigUint64(
+                    offset + 8,
+                    true
+                )
+            );
+
+
+        console.log(
+            "NSIndexSet range :",
+            location,
+            "+",
+            length
+        );
+
+
+        for (
+            let j = 0;
+            j < length;
+            j++
+        )
+        {
+            result.add(
+                location + j
+            );
+        }
+    }
+
+
+    return result;
+}
+
+
+// ============================================================
+// IMAGE SIMPLE
+// ============================================================
+
+async function loadImageFile(
+    file
+)
+{
+    console.log(
+        "Chargement image :",
+        file.name
+    );
+
+
+    const url =
+        URL.createObjectURL(
+            file
+        );
+
+
+    const image =
+        new Image();
+
+
+    image.onload =
+        function ()
+        {
+            URL.revokeObjectURL(
+                url
+            );
+
+
+            sourceImage =
+                image;
+
+            colorImage =
+                null;
+
+            paletteImage =
+                null;
+
+            selectedTiles =
+                new Set();
+
+
+            recomputeGrid();
+
+            draw();
+
+
+            const info =
+                document.getElementById(
+                    "info"
+                );
+
+
+            if (info)
+            {
+                info.textContent =
+                    image.width +
+                    " × " +
+                    image.height +
+                    " — " +
+                    cols +
+                    " × " +
+                    rows;
+            }
+
+
+            console.log(
+                "Image chargée :",
+                image.width,
+                "x",
+                image.height
+            );
+        };
+
+
+    image.onerror =
+        function ()
+        {
+            URL.revokeObjectURL(
+                url
+            );
+
+
+            alert(
+                "Impossible de charger l'image."
+            );
+        };
+
+
+    image.src =
+        url;
+}
+
+
+// ============================================================
+// GRILLE
+// ============================================================
+
+function recomputeGrid()
+{
+    if (!sourceImage)
+    {
+        cols = 0;
+        rows = 0;
+
+        canvas.width = 1;
+        canvas.height = 1;
+
+        return;
+    }
+
+
+    cols =
+        Math.ceil(
+            sourceImage.width /
+            tileSize
+        );
+
+
+    rows =
+        Math.ceil(
+            sourceImage.height /
+            tileSize
+        );
+
+
+    canvas.width =
+        cols * tileSize;
+
+
+    canvas.height =
+        rows * tileSize;
+
+
+    console.log(
+        "Grille :",
+        cols,
+        "x",
+        rows,
+        "cases"
+    );
+}
+
+
+// ============================================================
+// DESSIN
+// ============================================================
+
+function draw()
+{
+    if (!ctx)
+    {
+        return;
+    }
+
+
+    ctx.clearRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+
+    if (!sourceImage)
+    {
+        return;
+    }
+
+
+    // --------------------------------------------------------
+    // Image
+    // --------------------------------------------------------
+
+    ctx.drawImage(
+        sourceImage,
+        0,
+        0,
+        canvas.width,
+        canvas.height
     );
 
 
     // --------------------------------------------------------
-    // INITIALISATION LZFSE
+    // Cases sélectionnées
     // --------------------------------------------------------
 
-    try
+    ctx.save();
+
+
+    for (
+        const index of selectedTiles
+    )
     {
-        await initializeLZFSE();
-    }
-    catch (error)
-    {
-        console.error(
-            "LZFSE indisponible :",
-            error
+        if (
+            index < 0 ||
+            index >= cols * rows
+        )
+        {
+            continue;
+        }
+
+
+        const col =
+            index % cols;
+
+
+        const row =
+            Math.floor(
+                index / cols
+            );
+
+
+        const x =
+            col * tileSize;
+
+
+        const y =
+            row * tileSize;
+
+
+        ctx.fillStyle =
+            "rgba(255, 0, 0, 0.35)";
+
+
+        ctx.fillRect(
+            x,
+            y,
+            tileSize,
+            tileSize
         );
     }
-});
+
+
+    ctx.restore();
+
+
+    // --------------------------------------------------------
+    // Grille
+    // --------------------------------------------------------
+
+    ctx.save();
+
+
+    ctx.strokeStyle =
+        "rgba(0, 0, 0, 0.35)";
+
+
+    ctx.lineWidth =
+        1;
+
+
+    ctx.beginPath();
+
+
+    for (
+        let col = 0;
+        col <= cols;
+        col++
+    )
+    {
+        const x =
+            col * tileSize +
+            0.5;
+
+
+        ctx.moveTo(
+            x,
+            0
+        );
+
+
+        ctx.lineTo(
+            x,
+            canvas.height
+        );
+    }
+
+
+    for (
+        let row = 0;
+        row <= rows;
+        row++
+    )
+    {
+        const y =
+            row * tileSize +
+            0.5;
+
+
+        ctx.moveTo(
+            0,
+            y
+        );
+
+
+        ctx.lineTo(
+            canvas.width,
+            y
+        );
+    }
+
+
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+
+// ============================================================
+// SELECTION
+// ============================================================
+
+function tileIndexForPoint(
+    x,
+    y
+)
+{
+    const col =
+        Math.floor(
+            x / tileSize
+        );
+
+
+    const row =
+        Math.floor(
+            y / tileSize
+        );
+
+
+    if (
+        col < 0 ||
+        col >= cols ||
+        row < 0 ||
+        row >= rows
+    )
+    {
+        return -1;
+    }
+
+
+    return (
+        row * cols +
+        col
+    );
+}
+
+
+function toggleTileAt(
+    x,
+    y
+)
+{
+    const index =
+        tileIndexForPoint(
+            x,
+            y
+        );
+
+
+    if (index < 0)
+    {
+        return;
+    }
+
+
+    if (
+        selectedTiles.has(
+            index
+        )
+    )
+    {
+        selectedTiles.delete(
+            index
+        );
+    }
+    else
+    {
+        selectedTiles.add(
+            index
+        );
+    }
+
+
+    draw();
+}
+
+
+// ============================================================
+// TOUCH
+// ============================================================
+
+function distanceBetweenTouches(
+    touch1,
+    touch2
+)
+{
+    const dx =
+        touch1.clientX -
+        touch2.clientX;
+
+
+    const dy =
+        touch1.clientY -
+        touch2.clientY;
+
+
+    return Math.sqrt(
+        dx * dx +
+        dy * dy
+    );
+}
+
+
+function canvasPointFromTouch(
+    touch
+)
+{
+    const rect =
+        canvas.getBoundingClientRect();
+
+
+    const scaleX =
+        canvas.width /
+        rect.width;
+
+
+    const scaleY =
+        canvas.height /
+        rect.height;
+
+
+    return {
+        x:
+            (touch.clientX -
+             rect.left) *
+            scaleX,
+
+        y:
+            (touch.clientY -
+             rect.top) *
+            scaleY
+    };
+}
+
+
+function handleTouchStart(
+    event
+)
+{
+    event.preventDefault();
+
+
+    if (
+        event.touches.length === 2
+    )
+    {
+        lastTouchDistance =
+            distanceBetweenTouches(
+                event.touches[0],
+                event.touches[1]
+            );
+
+        isDragging =
+            false;
+
+        return;
+    }
+
+
+    if (
+        event.touches.length === 1
+    )
+    {
+        const touch =
+            event.touches[0];
+
+
+        const point =
+            canvasPointFromTouch(
+                touch
+            );
+
+
+        touchStartX =
+            point.x;
+
+        touchStartY =
+            point.y;
+
+
+        isDragging =
+            true;
+
+
+        toggleTileAt(
+            point.x,
+            point.y
+        );
+    }
+}
+
+
+function handleTouchMove(
+    event
+)
+{
+    event.preventDefault();
+
+
+    if (
+        event.touches.length === 2
+    )
+    {
+        const distance =
+            distanceBetweenTouches(
+                event.touches[0],
+                event.touches[1]
+            );
+
+
+        if (
+            lastTouchDistance > 0
+        )
+        {
+            const ratio =
+                distance /
+                lastTouchDistance;
+
+
+            zoomFactor *=
+                ratio;
+
+
+            zoomFactor =
+                Math.max(
+                    0.25,
+                    Math.min(
+                        5.0,
+                        zoomFactor
+                    )
+                );
+
+
+            canvas.style.transform =
+                "scale(" +
+                zoomFactor +
+                ")";
+
+
+            lastTouchDistance =
+                distance;
+        }
+
+
+        return;
+    }
+
+
+    if (
+        event.touches.length === 1 &&
+        isDragging
+    )
+    {
+        const touch =
+            event.touches[0];
+
+
+        const point =
+            canvasPointFromTouch(
+                touch
+            );
+
+
+        const index =
+            tileIndexForPoint(
+                point.x,
+                point.y
+            );
+
+
+        if (
+            index >= 0 &&
+            !selectedTiles.has(
+                index
+            )
+        )
+        {
+            selectedTiles.add(
+                index
+            );
+
+            draw();
+        }
+    }
+}
+
+
+function handleTouchEnd(
+    event
+)
+{
+    event.preventDefault();
+
+
+    if (
+        event.touches.length < 2
+    )
+    {
+        lastTouchDistance =
+            0;
+    }
+
+
+    if (
+        event.touches.length === 0
+    )
+    {
+        isDragging =
+            false;
+    }
+}
+
+
+// ============================================================
+// EFFACER
+// ============================================================
+
+function clearSelection()
+{
+    selectedTiles.clear();
+
+    draw();
+
+
+    console.log(
+        "Sélection effacée."
+    );
+}
