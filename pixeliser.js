@@ -39,6 +39,7 @@ let touchInteractionActive = false;
 // ============================================================
 document.addEventListener("DOMContentLoaded",async function(){
     console.log("Pixeliser démarrage...");
+    testEncodeLZFSE();
     console.log("Version ",version);
     canvas=document.getElementById("canvas");
     if(!canvas){
@@ -1265,4 +1266,37 @@ function clearSelection(){
     selectedTiles.clear();
     draw();
     console.log("Sélection effacée.");
+}
+
+async function testEncodeLZFSE() {
+
+    const testData = new TextEncoder().encode(
+        "TEST LZFSE depuis Safari iPad"
+    );
+
+    console.log("=== TEST ENCODAGE LZFSE ===");
+
+    const compressed = encodeLZFSE(testData);
+
+    console.log(
+        "Entrée :",
+        testData.length,
+        "octets"
+    );
+
+    console.log(
+        "Sortie :",
+        compressed.length,
+        "octets"
+    );
+
+    console.log(
+        "Signature :",
+        String.fromCharCode(
+            compressed[0],
+            compressed[1],
+            compressed[2],
+            compressed[3]
+        )
+    );
 }
