@@ -1032,94 +1032,216 @@ function distanceBetweenTouches(touch1,touch2){
 // TOUCH START
 // ============================================================
 function handleTouchStart(event){
+
     event.preventDefault();
+
     touchInteractionActive=true;
+
+    const rect=canvas.getBoundingClientRect();
+
+    // --------------------------------------------------------
+    // DEUX DOIGTS : début PAN + PINCH
+    // --------------------------------------------------------
     if(event.touches.length===2){
+
         const t1=event.touches[0];
         const t2=event.touches[1];
+
         lastPinchDistance=distanceBetweenTouches(t1,t2);
-        const rect=canvas.getBoundingClientRect();
-        lastPinchCenterX=(t1.clientX+t2.clientX)/2-rect.left;
-        lastPinchCenterY=(t1.clientY+t2.clientY)/2-rect.top;
-        // Deux doigts = on annule le tap.
+
+        lastPinchCenterX=
+            (t1.clientX+t2.clientX)/2-rect.left;
+
+        lastPinchCenterY=
+            (t1.clientY+t2.clientY)/2-rect.top;
+
+        // Un geste à deux doigts ne doit jamais devenir un tap.
         singlePointerMoved=true;
+
         return;
     }
+
+    // --------------------------------------------------------
+    // UN DOIGT
+    // --------------------------------------------------------
     if(event.touches.length===1){
+
         const touch=event.touches[0];
-        const point=canvasPointFromClient(touch.clientX,touch.clientY);
+
+        const point=
+            canvasPointFromClient(
+                touch.clientX,
+                touch.clientY
+            );
+
         singlePointerMoved=false;
+
         lastPointerWorldX=point.x;
         lastPointerWorldY=point.y;
+
+        return;
     }
 }
+
+
 // ============================================================
 // TOUCH MOVE
 // ============================================================
 function handleTouchMove(event){
+
     event.preventDefault();
-    // --------------------------------------------------------
-    // DEUX DOIGTS : PINCH + PAN
-    // --------------------------------------------------------
+
+    // Safari peut fournir des événements avec plusieurs
+    // touches pendant la transition 1 -> 2 doigts.
     if(event.touches.length===2){
+
         const t1=event.touches[0];
         const t2=event.touches[1];
-        const distance=distanceBetweenTouches(t1,t2);
+
         const rect=canvas.getBoundingClientRect();
-        const centerX=(t1.clientX+t2.clientX)/2-rect.left;
-        const centerY=(t1.clientY+t2.clientY)/2-rect.top;
-        if(lastPinchDistance>0){
-            // Point monde situé sous l'ancien centre des doigts.
-            const worldX=(lastPinchCenterX-panX)/zoomFactor;
-            const worldY=(lastPinchCenterY-panY)/zoomFactor;
-            const ratio=distance/lastPinchDistance;
-            let newZoom=zoomFactor*ratio;
-            newZoom=Math.max(0.05,Math.min(10.0,newZoom));
-            // Le même point monde reste sous le nouveau centre.
-            // Cela réalise simultanément le zoom et le pan.
-            panX=centerX-worldX*newZoom;
-            panY=centerY-worldY*newZoom;
-            zoomFactor=newZoom;
+
+        const centerX=
+            (t1.clientX+t2.clientX)/2-rect.left;
+
+        const centerY=
+            (t1.clientY+t2.clientY)/2-rect.top;
+
+        const distance=
+            distanceBetweenTouches(t1,t2);
+
+        // Première mesure du pinch.
+        if(lastPinchDistance<=0){
+
             lastPinchDistance=distance;
             lastPinchCenterX=centerX;
             lastPinchCenterY=centerY;
-            draw();
+
+            return;
         }
+
+        // ----------------------------------------------------
+        // POINT MONDE SOUS L'ANCIEN CENTRE
+        // ----------------------------------------------------
+        const worldX=
+            (lastPinchCenterX-panX)/zoomFactor;
+
+        const worldY=
+            (lastPinchCenterY-panY)/zoomFactor;
+
+        // ----------------------------------------------------
+        // ZOOM
+        // ----------------------------------------------------
+        let ratio=distance/lastPinchDistance;
+
+        // Protection contre les valeurs aberrantes.
+        if(!Number.isFinite(ratio)||ratio<=0){
+            return;
+        }
+
+        let newZoom=zoomFactor*ratio;
+
+        newZoom=
+            Math.max(
+                0.05,
+                Math.min(10.0,newZoom)
+            );
+
+        // ----------------------------------------------------
+        // PAN + ZOOM
+        //
+        // Le même point du monde reste sous le centre
+        // du geste.
+        // ----------------------------------------------------
+        panX=centerX-worldX*newZoom;
+        panY=centerY-worldY*newZoom;
+
+        zoomFactor=newZoom;
+
+        // ----------------------------------------------------
+        // Mémorisation pour le prochain événement
+        // ----------------------------------------------------
+        lastPinchDistance=distance;
+        lastPinchCenterX=centerX;
+        lastPinchCenterY=centerY;
+
+        draw();
+
         return;
     }
+
     // --------------------------------------------------------
-    // UN DOIGT : SÉLECTION PAR GLISSEMENT
+    // UN DOIGT : SÉLECTION
     // --------------------------------------------------------
     if(event.touches.length===1){
+
         const touch=event.touches[0];
-        const point=canvasPointFromClient(touch.clientX,touch.clientY);
-        const dx=point.x-lastPointerWorldX;
-        const dy=point.y-lastPointerWorldY;
+
+        const point=
+            canvasPointFromClient(
+                touch.clientX,
+                touch.clientY
+            );
+
+        const dx=
+            point.x-lastPointerWorldX;
+
+        const dy=
+            point.y-lastPointerWorldY;
+
         if(Math.abs(dx)>2||Math.abs(dy)>2){
+
             singlePointerMoved=true;
         }
+
         if(singlePointerMoved){
-            selectTileAt(point.x,point.y);
+
+            selectTileAt(
+                point.x,
+                point.y
+            );
         }
+
         lastPointerWorldX=point.x;
         lastPointerWorldY=point.y;
     }
 }
+
+
 // ============================================================
 // TOUCH END
 // ============================================================
 function handleTouchEnd(event){
+
     event.preventDefault();
-    // Un doigt sans déplacement = TAP.
-    if(event.touches.length===0&&!singlePointerMoved){
-        toggleTileAt(lastPointerWorldX,lastPointerWorldY);
-    }
-    // Fin du pinch.
-    if(event.touches.length<2){
+
+    // --------------------------------------------------------
+    // Si le pinch vient de se terminer mais qu'un doigt
+    // reste posé, surtout ne pas générer de TAP.
+    // --------------------------------------------------------
+    if(event.touches.length===1){
+
+        singlePointerMoved=true;
+
         lastPinchDistance=0;
+
+        return;
     }
-    // Plus aucun doigt.
+
+    // --------------------------------------------------------
+    // PLUS AUCUN DOIGT
+    // --------------------------------------------------------
     if(event.touches.length===0){
+
+        if(!singlePointerMoved){
+
+            toggleTileAt(
+                lastPointerWorldX,
+                lastPointerWorldY
+            );
+        }
+
+        lastPinchDistance=0;
+
         singlePointerMoved=false;
         touchInteractionActive=false;
     }
