@@ -70,7 +70,7 @@ document.addEventListener(
             "Pixeliser démarrage..."
         );
          console.log(
-            "Version ",version)
+            "Version ",version
         );
 
         canvas =
