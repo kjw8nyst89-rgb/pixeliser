@@ -2814,7 +2814,7 @@ function recomputeGrid()
 // ============================================================
 // DESSIN
 // ============================================================
-function draw()
+function drawtrace()
 {
     console.log("========== DRAW TEST ==========");
 
@@ -2835,96 +2835,55 @@ function draw()
         ctx.getImageData(10, 10, 1, 1).data
     );
 }
-function drawOld()
-    
+function draw()
 {
     console.log("========== DRAW ==========");
 
-console.log(
-    "canvas :",
-    canvas
-);
+    console.log("canvas :", canvas);
 
-console.log(
-    "canvas.width / height :",
-    canvas.width,
-    canvas.height
-);
-
-console.log(
-    "canvas.clientWidth / clientHeight :",
-    canvas.clientWidth,
-    canvas.clientHeight
-);
-
-console.log(
-    "sourceImage :",
-    sourceImage
-);
-
-if (sourceImage)
-{
     console.log(
-        "sourceImage.width / height :",
-        sourceImage.width,
-        sourceImage.height
+        "canvas.width / height :",
+        canvas.width,
+        canvas.height
     );
-}
 
-console.log(
-    "tileSize :",
-    tileSize
-);
+    console.log(
+        "canvas.clientWidth / clientHeight :",
+        canvas.clientWidth,
+        canvas.clientHeight
+    );
 
-console.log(
-    "selectedTiles :",
-    selectedTiles ? selectedTiles.size : null
-);
+    console.log("sourceImage :", sourceImage);
 
-const ctx =
-    canvas.getContext("2d");
+    if (sourceImage)
+    {
+        console.log(
+            "sourceImage.width / height :",
+            sourceImage.width,
+            sourceImage.height
+        );
+    }
 
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    console.log("tileSize :", tileSize);
 
-ctx.fillStyle = "red";
-ctx.fillRect(0, 0, canvas.width, canvas.height);
+    console.log(
+        "selectedTiles :",
+        selectedTiles ? selectedTiles.size : null
+    );
 
-const pixel = ctx.getImageData(10, 10, 1, 1).data;
+    const ctx = canvas.getContext("2d");
 
-console.log("PIXEL TEST :", pixel);
-console.log("CANVAS RECT :", canvas.getBoundingClientRect());
-
-console.log(
-    "CANVAS CSS :",
-    getComputedStyle(canvas).display,
-    getComputedStyle(canvas).visibility,
-    getComputedStyle(canvas).opacity,
-    getComputedStyle(canvas).position,
-    getComputedStyle(canvas).zIndex
-);
-
-console.log(
-    "WORKSPACE RECT :",
-    document.getElementById("workspace").getBoundingClientRect()
-);
-
-console.log(
-    "ELEMENT SOUS LE COIN :",
-    document.elementFromPoint(
-        canvas.getBoundingClientRect().left + 10,
-        canvas.getBoundingClientRect().top + 10
-    )
-);
-
-console.log(
-    "context 2D :",
-    ctx
-);
     if (!ctx)
     {
+        console.error("Impossible d'obtenir le contexte 2D.");
         return;
     }
 
+    // --------------------------------------------------------
+    // Réinitialisation du contexte
+    // --------------------------------------------------------
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
 
     ctx.clearRect(
         0,
@@ -2932,87 +2891,79 @@ console.log(
         canvas.width,
         canvas.height
     );
-ctx.fillStyle = "red";
-
-ctx.fillRect(
-    0,
-    0,
-    canvas.width,
-    canvas.height
-);
-
-    if (!sourceImage)
-    {
-        return;
-    }
-
 
     // --------------------------------------------------------
     // Image
     // --------------------------------------------------------
 
-    ctx.drawImage(
-        sourceImage,
-        0,
-        0,
-        canvas.width,
-        canvas.height
-    );
+    if (sourceImage)
+    {
+        ctx.drawImage(
+            sourceImage,
+            0,
+            0,
+            canvas.width,
+            canvas.height
+        );
+    }
+    else
+    {
+        // Test visuel si aucune image n'est disponible
+        ctx.fillStyle = "#ff0000";
 
+        ctx.fillRect(
+            0,
+            0,
+            canvas.width,
+            canvas.height
+        );
+
+        return;
+    }
 
     // --------------------------------------------------------
     // Cases sélectionnées
     // --------------------------------------------------------
 
-    ctx.save();
-
-
-    for (
-        const index of selectedTiles
-    )
+    if (selectedTiles)
     {
-        if (
-            index < 0 ||
-            index >= cols * rows
-        )
-        {
-            continue;
-        }
-
-
-        const col =
-            index % cols;
-
-
-        const row =
-            Math.floor(
-                index / cols
-            );
-
-
-        const x =
-            col * tileSize;
-
-
-        const y =
-            row * tileSize;
-
+        ctx.save();
 
         ctx.fillStyle =
             "rgba(255, 0, 0, 0.35)";
 
+        for (const index of selectedTiles)
+        {
+            if (
+                index < 0 ||
+                index >= cols * rows
+            )
+            {
+                continue;
+            }
 
-        ctx.fillRect(
-            x,
-            y,
-            tileSize,
-            tileSize
-        );
+            const col =
+                index % cols;
+
+            const row =
+                Math.floor(index / cols);
+
+            const x =
+                col * tileSize;
+
+            const y =
+                row * tileSize;
+
+            ctx.fillRect(
+                x,
+                y,
+                tileSize,
+                tileSize
+            );
+        }
+
+        ctx.restore();
     }
-
-
-    ctx.restore();
-
 
     // --------------------------------------------------------
     // Grille
@@ -3020,17 +2971,12 @@ ctx.fillRect(
 
     ctx.save();
 
-
     ctx.strokeStyle =
         "rgba(0, 0, 0, 0.35)";
 
-
-    ctx.lineWidth =
-        1;
-
+    ctx.lineWidth = 1;
 
     ctx.beginPath();
-
 
     for (
         let col = 0;
@@ -3039,22 +2985,18 @@ ctx.fillRect(
     )
     {
         const x =
-            col * tileSize +
-            0.5;
-
+            col * tileSize + 0.5;
 
         ctx.moveTo(
             x,
             0
         );
 
-
         ctx.lineTo(
             x,
             canvas.height
         );
     }
-
 
     for (
         let row = 0;
@@ -3063,15 +3005,12 @@ ctx.fillRect(
     )
     {
         const y =
-            row * tileSize +
-            0.5;
-
+            row * tileSize + 0.5;
 
         ctx.moveTo(
             0,
             y
         );
-
 
         ctx.lineTo(
             canvas.width,
@@ -3079,10 +3018,11 @@ ctx.fillRect(
         );
     }
 
-
     ctx.stroke();
 
     ctx.restore();
+
+    console.log("DRAW terminé");
 }
 
 
