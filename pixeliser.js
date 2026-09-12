@@ -65,15 +65,9 @@ document.addEventListener(
     "DOMContentLoaded",
     async function ()
     {
-                const PIXELISER_VERSION = "V2";
-
-console.log("================================");
-console.log("PIXELISER VERSION :", PIXELISER_VERSION);
-console.log("================================");
         console.log(
             "Pixeliser démarrage..."
         );
-
 
 
         canvas =
@@ -1762,31 +1756,92 @@ class KeyedArchiveResolver
 // DECODAGE ARCHIVE
 // ============================================================
 
-function decodeGrilleArchive(archive)
+function decodeGrilleArchive(
+    decoded
+)
 {
-    if (!archive || !archive.$objects)
+    console.log(
+        "================================"
+    );
+
+
+    console.log(
+        "DECODAGE BINARY PLIST"
+    );
+
+
+    console.log(
+        "Taille :",
+        decoded.length
+    );
+
+
+    const decoder =
+        new BinaryPlistDecoder(
+            decoded
+        );
+
+
+    const plist =
+        decoder.decode();
+
+
+    window.lastPlist =
+        plist;
+
+
+    window.lastPlistDecoder =
+        decoder;
+
+
+    console.log(
+        "Plist décodé :",
+        plist
+    );
+
+
+    console.log(
+        "Clés plist racine :",
+        Object.keys(plist)
+    );
+
+
+    if (
+        plist["$archiver"] !==
+        "NSKeyedArchiver"
+    )
     {
         throw new Error(
-            "Archive NSKeyedArchiver invalide."
+            "Archive NSKeyedArchiver attendue."
         );
     }
+
 
     const resolver =
-        new KeyedArchiveResolver(archive);
-
-    const rootUID =
-        archive.$top?.root?.uid;
-
-    if (rootUID === undefined)
-    {
-        throw new Error(
-            "Racine NSKeyedArchiver absente."
+        new KeyedArchiveResolver(
+            plist
         );
-    }
 
-    // rootUID est déjà le numéro de l'objet.
-    // Il faut donc appeler resolveUID(), pas resolveObject().
-    return resolver.resolveUID(rootUID);
+
+    window.lastArchiveResolver =
+        resolver;
+
+
+    const root =
+        resolver.root();
+
+
+    window.lastArchiveRoot =
+        root;
+
+
+    console.log(
+        "OBJET RACINE NSKEYEDARCHIVER :",
+        root
+    );
+
+
+    return root;
 }
 
 
