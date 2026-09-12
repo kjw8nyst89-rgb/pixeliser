@@ -42,7 +42,7 @@ document.addEventListener(
 
         canvas =
             document.getElementById("canvas");
-canvas.style.position = "fixed";
+/*canvas.style.position = "fixed";
 canvas.style.left = "0px";
 canvas.style.top = "54px";
 canvas.style.width = "300px";
@@ -65,6 +65,7 @@ console.log("canvas =", canvas);
 console.log("rect =", canvas.getBoundingClientRect());
 console.log("pixel =", testCtx.getImageData(10, 10, 1, 1).data);
 console.log("element =", document.elementFromPoint(10, 64));
+*/
         if (!canvas)
         {
             console.error(
