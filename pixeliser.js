@@ -403,6 +403,9 @@ function handlePointerDown(event)
 {
     event.preventDefault();
 
+    if (event.pointerType === "mouse")
+        return;
+
     canvas.setPointerCapture(event.pointerId);
 
     activePointers.set(
@@ -450,6 +453,8 @@ function handlePointerDown(event)
 
 function handlePointerMove(event)
 {
+    if (event.pointerType === "mouse")
+        return;
 
     if (!activePointers.has(event.pointerId))
         return;
@@ -512,6 +517,8 @@ function handlePointerMove(event)
 
 function handlePointerUp(event)
 {
+    if (event.pointerType === "mouse")
+        return;
 
     event.preventDefault();
 
@@ -2204,11 +2211,16 @@ function decodeGrilleArchive(archive)
         );
     }
 
+
     const resolver =
-        new KeyedArchiveResolver(archive);
+        new KeyedArchiveResolver(
+            archive
+        );
+
 
     const rootUID =
         archive.$top?.root?.uid;
+
 
     if (rootUID === undefined)
     {
@@ -2217,9 +2229,10 @@ function decodeGrilleArchive(archive)
         );
     }
 
-    // rootUID est déjà le numéro de l'objet.
-    // Il faut donc appeler resolveUID(), pas resolveObject().
-    return resolver.resolveUID(rootUID);
+
+    return resolver.resolveObject(
+        rootUID
+    );
 }
 
 
