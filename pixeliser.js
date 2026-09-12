@@ -1693,32 +1693,129 @@ function decodeGrilleArchive(
 // EXTRACTION DES DONNEES GRILLE
 // ============================================================
 
-function extractGrilleData(
-    root
-)
+// ============================================================
+// EXTRACTION DES DONNÉES DE LA GRILLE
+// ============================================================
+
+function extractGrilleData(root)
 {
-    if (
-        !root ||
-        typeof root !== "object"
-    )
+    console.log(
+        "================================"
+    );
+
+    console.log(
+        "EXTRACTION DONNÉES GRILLE"
+    );
+
+    if (!root)
     {
         throw new Error(
-            "Racine de grille invalide."
+            "Objet racine NSKeyedArchiver absent."
         );
     }
 
 
     console.log(
-        "Clés objet grille :",
+        "Type root :",
+        typeof root
+    );
+
+    console.log(
+        "Clés root :",
         Object.keys(root)
     );
 
 
-    const grilleData =
-        {};
+    // --------------------------------------------------------
+    // Vérification dictionnaire NSDictionary
+    // --------------------------------------------------------
+
+    const keys =
+        root["NS.keys"];
+
+    const objects =
+        root["NS.objects"];
 
 
-    const names = [
+    if (!Array.isArray(keys))
+    {
+        throw new Error(
+            "NS.keys absent ou invalide."
+        );
+    }
+
+
+    if (!Array.isArray(objects))
+    {
+        throw new Error(
+            "NS.objects absent ou invalide."
+        );
+    }
+
+
+    console.log(
+        "Nombre de clés :",
+        keys.length
+    );
+
+    console.log(
+        "Nombre de valeurs :",
+        objects.length
+    );
+
+
+    if (
+        keys.length !==
+        objects.length
+    )
+    {
+        throw new Error(
+            "NS.keys et NS.objects n'ont pas la même taille."
+        );
+    }
+
+
+    // --------------------------------------------------------
+    // Construction du dictionnaire
+    // --------------------------------------------------------
+
+    const result = {};
+
+
+    for (
+        let i = 0;
+        i < keys.length;
+        i++
+    )
+    {
+        const key =
+            keys[i];
+
+        const value =
+            objects[i];
+
+
+        console.log(
+            "Élément",
+            i,
+            ":",
+            key,
+            "=>",
+            value
+        );
+
+
+        result[key] =
+            value;
+    }
+
+
+    // --------------------------------------------------------
+    // Vérification des clés attendues
+    // --------------------------------------------------------
+
+    const expectedKeys =
+    [
         "GRILLE",
         "COULEUR",
         "PALETTE",
@@ -1729,36 +1826,22 @@ function extractGrilleData(
 
 
     for (
-        const name of names
+        const key of expectedKeys
     )
     {
-        if (
-            Object.prototype.hasOwnProperty.call(
-                root,
-                name
-            )
-        )
-        {
-            grilleData[name] =
-                root[name];
-
-            console.log(
-                name,
-                ":",
-                root[name]
-            );
-        }
-        else
-        {
-            console.warn(
-                name +
-                " absent de l'archive."
-            );
-        }
+        console.log(
+            key + " :",
+            result[key]
+        );
     }
 
 
-    return grilleData;
+    console.log(
+        "================================"
+    );
+
+
+    return result;
 }
 
 
