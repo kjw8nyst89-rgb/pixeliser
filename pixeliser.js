@@ -39,7 +39,7 @@ let touchInteractionActive = false;
 // ============================================================
 document.addEventListener("DOMContentLoaded",async function(){
     console.log("Pixeliser démarrage...");
-    testEncodeLZFSE();
+    
     console.log("Version ",version);
     canvas=document.getElementById("canvas");
     if(!canvas){
