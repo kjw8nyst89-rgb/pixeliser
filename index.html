@@ -25,7 +25,7 @@
 
 <body>
 
-    <!-- Barre d'outils -->
+<div id="app">
 
     <div id="toolbar">
 
@@ -40,7 +40,6 @@
             hidden
         >
 
-
         <button id="openGrilleButton">
             Ouvrir une grille
         </button>
@@ -52,11 +51,9 @@
             hidden
         >
 
-
         <button id="clearButton">
             Effacer
         </button>
-
 
         <label for="tileSize">
             Taille :
@@ -71,7 +68,6 @@
             inputmode="numeric"
         >
 
-
         <span id="info">
             Aucune image
         </span>
@@ -79,28 +75,23 @@
     </div>
 
 
-    <!-- Zone de travail -->
-
     <div id="workspace">
 
         <canvas
             id="canvas"
             width="1"
-            height="1"
-        ></canvas>
+            height="1">
+        </canvas>
 
     </div>
 
+</div>
 
-    <!--
-        Le module JavaScript est chargé après le DOM.
-        Il peut donc récupérer immédiatement #canvas.
-    -->
 
-    <script
-        type="module"
-        src="./pixeliser.js"
-    ></script>
+<script
+    type="module"
+    src="./pixeliser.js">
+</script>
 
 </body>
 
