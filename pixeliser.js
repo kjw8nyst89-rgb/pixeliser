@@ -53,24 +53,12 @@ document.addEventListener("DOMContentLoaded",async function(){
     // ----------------------------------------------------
     // Boutons
     // ----------------------------------------------------
-    const openButton=document.getElementById("openButton");
     const openGrilleButton=document.getElementById("openGrilleButton");
     const clearButton=document.getElementById("clearButton");
-    const imageInput=document.getElementById("imageInput");
     const grilleInput=document.getElementById("grilleInput");
-    const tileSizeInput=document.getElementById("tileSize");
-    if(openButton){
-        openButton.addEventListener("click",function(){
-            imageInput.click();
-        });
-    }
-    if(imageInput){
-        imageInput.addEventListener("change",function(event){
-            const file=event.target.files[0];
-            if(file){
-                loadImageFile(file);
-            }
-        });
+    const saveGrilleButton = document.getElementById("saveGrilleButton");
+    if(saveGrilleButton){ 
+        saveGrilleButton.addEventListener("click", saveGrille);
     }
     if(openGrilleButton){
         openGrilleButton.addEventListener("click",function(){
@@ -95,17 +83,7 @@ document.addEventListener("DOMContentLoaded",async function(){
     if(clearButton){
         clearButton.addEventListener("click",clearSelection);
     }
-    if(tileSizeInput){
-        tileSizeInput.addEventListener("change",function(){
-            const value=parseInt(tileSizeInput.value,10);
-            if(!Number.isFinite(value)||value<2){
-                return;
-            }
-            tileSize=value;
-            recomputeGrid();
-            draw();
-        });
-    }
+   
     // ----------------------------------------------------
     // Pointer Events
     //
