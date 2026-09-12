@@ -1,5 +1,5 @@
 import createLZFSEModule from "./lzfse/lzfse.js";
-const version = "V6";
+const version = "V7";
 let lzfseModule = null;
 let sourceImage = null;
 let colorImage = null;
@@ -140,61 +140,160 @@ document.addEventListener("DOMContentLoaded", async function () {
     }
     console.log("Pixeliser initialisé.");
 });
-async function initializeLZFSE() {
-    console.log("Chargement du module LZFSE...");
-    try {
-        const module = await createLZFSEModule();
-        console.log("Module LZFSE créé :", module);
-        console.log("decode_lzfse_memfs :", typeof module._decode_lzfse_memfs);
-        if (typeof module._decode_lzfse_memfs !== "function") {
-            throw new Error("_decode_lzfse_memfs n'est pas disponible.");
+async function initializeLZFSE()
+{
+    console.log(
+        "Chargement du module LZFSE..."
+    );
+    try
+    {
+        const module =
+            await createLZFSEModule();
+        console.log(
+            "Module LZFSE créé :",
+            module
+        );
+        console.log(
+            "decode_lzfse_memfs :",
+            typeof module._decode_lzfse_memfs
+        );
+        if (
+            typeof module._decode_lzfse_memfs !==
+            "function"
+        )
+        {
+            throw new Error(
+                "_decode_lzfse_memfs n'est pas disponible."
+            );
         }
-        if (!module.FS) {
-            throw new Error("Le système de fichiers MEMFS n'est pas disponible.");
+        if (!module.FS)
+        {
+            throw new Error(
+                "Le système de fichiers MEMFS n'est pas disponible."
+            );
         }
-        lzfseModule = module;
-        console.log("LZFSE prêt");
-    } catch (error) {
-        console.error("ERREUR INITIALISATION LZFSE :", error);
+        lzfseModule =
+            module;
+        console.log(
+            "LZFSE prêt"
+        );
+    }
+    catch (error)
+    {
+        console.error(
+            "ERREUR INITIALISATION LZFSE :",
+            error
+        );
         throw error;
     }
 }
-async function decompressLZFSE(compressed, originalSize) {
-    if (!lzfseModule) {
-        throw new Error("Le module LZFSE n'est pas prêt.");
+async function decompressLZFSE(
+    compressed,
+    originalSize
+)
+{
+    if (!lzfseModule)
+    {
+        throw new Error(
+            "Le module LZFSE n'est pas prêt."
+        );
     }
-    console.log("Décompression LZFSE via MEMFS...");
-    console.log("Compressed :", compressed.length);
-    console.log("Expected :", originalSize);
-    const inputPath = "/grille_input.lzfse";
-    const outputPath = "/grille_output.bin";
-    try {
-        lzfseModule.FS.unlink(inputPath);
-    } catch (e) {}
-    try {
-        lzfseModule.FS.unlink(outputPath);
-    } catch (e) {}
-    console.log("Copie des données LZFSE dans MEMFS...");
-    lzfseModule.FS.writeFile(inputPath, compressed);
-    console.log("Fichier MEMFS créé :", inputPath);
-    console.log("Appel decode_lzfse_memfs...");
-    const decodedSize = lzfseModule._decode_lzfse_memfs(originalSize);
-    console.log("Taille décompressée :", decodedSize);
-    if (decodedSize <= 0) {
-        throw new Error("Échec de la décompression LZFSE.");
+    console.log(
+        "Décompression LZFSE via MEMFS..."
+    );
+    console.log(
+        "Compressed :",
+        compressed.length
+    );
+    console.log(
+        "Expected :",
+        originalSize
+    );
+    const inputPath =
+        "/grille_input.lzfse";
+    const outputPath =
+        "/grille_output.bin";
+    try
+    {
+        lzfseModule.FS.unlink(
+            inputPath
+        );
     }
-    const decoded = lzfseModule.FS.readFile(outputPath);
-    console.log("Archive décompressée :", decoded.length, "octets");
-    try {
-        lzfseModule.FS.unlink(inputPath);
-    } catch (e) {}
-    try {
-        lzfseModule.FS.unlink(outputPath);
-    } catch (e) {}
-    return new Uint8Array(decoded);
+    catch (e)
+    {
+    }
+    try
+    {
+        lzfseModule.FS.unlink(
+            outputPath
+        );
+    }
+    catch (e)
+    {
+    }
+    console.log(
+        "Copie des données LZFSE dans MEMFS..."
+    );
+    lzfseModule.FS.writeFile(
+        inputPath,
+        compressed
+    );
+    console.log(
+        "Fichier MEMFS créé :",
+        inputPath
+    );
+    console.log(
+        "Appel decode_lzfse_memfs..."
+    );
+    const decodedSize =
+        lzfseModule._decode_lzfse_memfs(
+            originalSize
+        );
+    console.log(
+        "Taille décompressée :",
+        decodedSize
+    );
+    if (decodedSize <= 0)
+    {
+        throw new Error(
+            "Échec de la décompression LZFSE."
+        );
+    }
+    const decoded =
+        lzfseModule.FS.readFile(
+            outputPath
+        );
+    console.log(
+        "Archive décompressée :",
+        decoded.length,
+        "octets"
+    );
+    try
+    {
+        lzfseModule.FS.unlink(
+            inputPath
+        );
+    }
+    catch (e)
+    {
+    }
+    try
+    {
+        lzfseModule.FS.unlink(
+            outputPath
+        );
+    }
+    catch (e)
+    {
+    }
+    return new Uint8Array(
+        decoded
+    );
 }
-class BinaryPlistDecoder {
-    constructor(bytes) {
+class BinaryPlistDecoder
+{
+    constructor(bytes)
+    {
         this.bytes = bytes;
         this.objects = [];
         this.offsets = [];
@@ -204,362 +303,867 @@ class BinaryPlistDecoder {
         this.topObject = 0;
         this.offsetTableOffset = 0;
     }
-    readUIntBE(offset, size) {
+    readUIntBE(
+        offset,
+        size
+    )
+    {
         let value = 0;
-        for (let i = 0; i < size; i++) {
-            value = value * 256 + this.bytes[offset + i];
+        for (
+            let i = 0;
+            i < size;
+            i++
+        )
+        {
+            value =
+                value * 256 +
+                this.bytes[
+                    offset + i
+                ];
         }
         return value;
     }
-    readDoubleBE(offset) {
-        const buffer = this.bytes.buffer.slice(
-            this.bytes.byteOffset + offset,
-            this.bytes.byteOffset + offset + 8
+    readDoubleBE(offset)
+    {
+        const buffer =
+            this.bytes.buffer.slice(
+                this.bytes.byteOffset +
+                offset,
+                this.bytes.byteOffset +
+                offset +
+                8
+            );
+        return new DataView(
+            buffer
+        ).getFloat64(
+            0,
+            false
         );
-        return new DataView(buffer).getFloat64(0, false);
     }
-    decode() {
-        if (this.bytes.length < 40) {
-            throw new Error("Binary plist trop court.");
-        }
-        const magic = String.fromCharCode(
-            this.bytes[0],
-            this.bytes[1],
-            this.bytes[2],
-            this.bytes[3],
-            this.bytes[4],
-            this.bytes[5],
-            this.bytes[6],
-            this.bytes[7]
-        );
-        if (magic !== "bplist00") {
-            throw new Error("Signature bplist00 absente.");
-        }
-        const trailerOffset = this.bytes.length - 32;
-        this.offsetIntSize = this.bytes[trailerOffset + 6];
-        this.objectRefSize = this.bytes[trailerOffset + 7];
-        this.numObjects = this.readUIntBE(trailerOffset + 8, 8);
-        this.topObject = this.readUIntBE(trailerOffset + 16, 8);
-        this.offsetTableOffset = this.readUIntBE(trailerOffset + 24, 8);
-        console.log("offsetIntSize:", this.offsetIntSize);
-        console.log("objectRefSize:", this.objectRefSize);
-        console.log("numObjects:", this.numObjects);
-        console.log("topObject:", this.topObject);
-        console.log("offsetTableOffset:", this.offsetTableOffset);
-        this.offsets = new Array(this.numObjects);
-        for (let i = 0; i < this.numObjects; i++) {
-            this.offsets[i] = this.readUIntBE(
-                this.offsetTableOffset + i * this.offsetIntSize,
-                this.offsetIntSize
+    decode()
+    {
+        if (
+            this.bytes.length < 40
+        )
+        {
+            throw new Error(
+                "Binary plist trop court."
             );
         }
-        this.objects = new Array(this.numObjects);
-        for (let i = 0; i < this.numObjects; i++) {
-            this.objects[i] = this.decodeObjectAt(i);
+        const magic =
+            String.fromCharCode(
+                this.bytes[0],
+                this.bytes[1],
+                this.bytes[2],
+                this.bytes[3],
+                this.bytes[4],
+                this.bytes[5],
+                this.bytes[6],
+                this.bytes[7]
+            );
+        if (magic !== "bplist00")
+        {
+            throw new Error(
+                "Ce fichier n'est pas un binary plist."
+            );
         }
-        return this.objects[this.topObject];
+        const trailer =
+            this.bytes.length - 32;
+        this.offsetIntSize =
+            this.bytes[
+                trailer + 6
+            ];
+        this.objectRefSize =
+            this.bytes[
+                trailer + 7
+            ];
+        this.numObjects =
+            this.readUIntBE(
+                trailer + 8,
+                8
+            );
+        this.topObject =
+            this.readUIntBE(
+                trailer + 16,
+                8
+            );
+        this.offsetTableOffset =
+            this.readUIntBE(
+                trailer + 24,
+                8
+            );
+        console.log(
+            "Binary plist :",
+            {
+                offsetIntSize:
+                    this.offsetIntSize,
+                objectRefSize:
+                    this.objectRefSize,
+                numObjects:
+                    this.numObjects,
+                topObject:
+                    this.topObject,
+                offsetTableOffset:
+                    this.offsetTableOffset
+            }
+        );
+        this.offsets =
+            new Array(
+                this.numObjects
+            );
+        for (
+            let i = 0;
+            i < this.numObjects;
+            i++
+        )
+        {
+            this.offsets[i] =
+                this.readUIntBE(
+                    this.offsetTableOffset +
+                    i *
+                    this.offsetIntSize,
+                    this.offsetIntSize
+                );
+        }
+        this.objects =
+            new Array(
+                this.numObjects
+            );
+        return this.decodeObject(
+            this.topObject
+        );
     }
-    readCount(offset, info) {
-        if (info < 0x0f) {
-            return {
-                count: info,
-                offset: offset
-            };
+    decodeObject(ref)
+    {
+        if (
+            ref < 0 ||
+            ref >= this.numObjects
+        )
+        {
+            throw new Error(
+                "Référence objet invalide : " +
+                ref
+            );
         }
-        const marker = this.bytes[offset];
-        const type = marker >> 4;
-        const integerInfo = marker & 0x0f;
-        if (type !== 0x1) {
-            throw new Error("Objet count invalide.");
+        if (
+            this.objects[ref] !== undefined
+        )
+        {
+            return this.objects[ref];
         }
-        const size = 1 << integerInfo;
-        const count = this.readUIntBE(offset + 1, size);
-        return {
-            count: count,
-            offset: offset + 1 + size
-        };
-    }
-    decodeObjectAt(index) {
-        const offset = this.offsets[index];
-        const marker = this.bytes[offset];
-        const type = marker >> 4;
-        const info = marker & 0x0f;
-        switch (type) {
+        const offset =
+            this.offsets[ref];
+        const marker =
+            this.bytes[offset];
+        const type =
+            marker >> 4;
+        const info =
+            marker & 0x0F;
+        let value;
+        switch (type)
+        {
             case 0x0:
-                if (info === 0x0) return null;
-                if (info === 0x8) return false;
-                if (info === 0x9) return true;
-                if (info === 0xf) return null;
-                return null;
-            case 0x1: {
-                const size = 1 << info;
-                return this.readUIntBE(offset + 1, size);
-            }
-            case 0x2: {
-                const size = 1 << info;
-                if (size === 4) {
-                    const buffer = this.bytes.buffer.slice(
-                        this.bytes.byteOffset + offset + 1,
-                        this.bytes.byteOffset + offset + 5
+                value =
+                    this.decodeSimple(
+                        info
                     );
-                    return new DataView(buffer).getFloat32(0, false);
-                }
-                if (size === 8) {
-                    return this.readDoubleBE(offset + 1);
-                }
-                throw new Error("Taille float non supportée : " + size);
-            }
+                break;
+            case 0x1:
+                value =
+                    this.decodeInteger(
+                        info,
+                        offset
+                    );
+                break;
+            case 0x2:
+                value =
+                    this.decodeReal(
+                        info,
+                        offset
+                    );
+                break;
             case 0x3:
-                if (info === 0x3) {
-                    return this.readDoubleBE(offset + 1);
-                }
-                throw new Error("Date plist non supportée.");
-            case 0x4: {
-                const result = this.readCount(offset + 1, info);
-                const count = result.count;
-                const start = result.offset;
-                return this.bytes.slice(start, start + count);
-            }
-            case 0x5: {
-                const result = this.readCount(offset + 1, info);
-                const count = result.count;
-                const start = result.offset;
-                let value = "";
-                for (let i = 0; i < count; i++) {
-                    value += String.fromCharCode(this.bytes[start + i]);
-                }
-                return value;
-            }
-            case 0x6: {
-                const result = this.readCount(offset + 1, info);
-                const count = result.count;
-                const start = result.offset;
-                const byteLength = count * 2;
-                const buffer = this.bytes.buffer.slice(
-                    this.bytes.byteOffset + start,
-                    this.bytes.byteOffset + start + byteLength
-                );
-                return new TextDecoder("utf-16be").decode(buffer);
-            }
-            case 0x8: {
-                const count = info + 1;
-                const value = this.readUIntBE(
-                    offset + 1,
-                    count
-                );
-                return {
-                    __uid: true,
-                    uid: value
-                };
-            }
-            case 0xa: {
-                const result = this.readCount(offset + 1, info);
-                const count = result.count;
-                const start = result.offset;
-                const refs = [];
-                for (let i = 0; i < count; i++) {
-                    refs.push(
-                        this.readUIntBE(
-                            start + i * this.objectRefSize,
-                            this.objectRefSize
-                        )
+                value =
+                    this.decodeDate(
+                        info,
+                        offset
                     );
-                }
-                return refs.map(ref => ({
-                    __uid: true,
-                    uid: ref
-                }));
-            }
-            case 0xd: {
-                const result = this.readCount(offset + 1, info);
-                const count = result.count;
-                const start = result.offset;
-                const keyRefs = [];
-                const valueRefs = [];
-                for (let i = 0; i < count; i++) {
-                    keyRefs.push(
-                        this.readUIntBE(
-                            start + i * this.objectRefSize,
-                            this.objectRefSize
-                        )
+                break;
+            case 0x4:
+                value =
+                    this.decodeData(
+                        info,
+                        offset
                     );
-                }
-                const valuesStart =
-                    start + count * this.objectRefSize;
-                for (let i = 0; i < count; i++) {
-                    valueRefs.push(
-                        this.readUIntBE(
-                            valuesStart + i * this.objectRefSize,
-                            this.objectRefSize
-                        )
+                break;
+            case 0x5:
+                value =
+                    this.decodeASCII(
+                        info,
+                        offset
                     );
-                }
-                return {
-                    "NS.keys": keyRefs.map(ref => ({
-                        __uid: true,
-                        uid: ref
-                    })),
-                    "NS.objects": valueRefs.map(ref => ({
-                        __uid: true,
-                        uid: ref
-                    }))
-                };
-            }
+                break;
+            case 0x6:
+                value =
+                    this.decodeUTF16(
+                        info,
+                        offset
+                    );
+                break;
+            case 0x8:
+                value =
+                    this.decodeUID(
+                        info,
+                        offset
+                    );
+                break;
+            case 0xA:
+                value =
+                    this.decodeArray(
+                        info,
+                        offset
+                    );
+                break;
+            case 0xD:
+                value =
+                    this.decodeDictionary(
+                        info,
+                        offset
+                    );
+                break;
             default:
                 throw new Error(
-                    "Type objet plist non supporté : 0x" +
+                    "Type plist inconnu : 0x" +
                     type.toString(16)
                 );
         }
+        this.objects[ref] =
+            value;
+        return value;
+    }
+    decodeLength(
+        info,
+        offset
+    )
+    {
+        if (
+            info < 0x0F
+        )
+        {
+            return {
+                length: info,
+                offset: offset + 1
+            };
+        }
+        const marker =
+            this.bytes[
+                offset + 1
+            ];
+        const type =
+            marker >> 4;
+        const integerInfo =
+            marker & 0x0F;
+        if (type !== 0x1)
+        {
+            throw new Error(
+                "Longueur plist invalide."
+            );
+        }
+        const byteCount =
+            1 << integerInfo;
+        const length =
+            this.readUIntBE(
+                offset + 2,
+                byteCount
+            );
+        return {
+            length: length,
+            offset:
+                offset +
+                2 +
+                byteCount
+        };
+    }
+    decodeSimple(info)
+    {
+        switch (info)
+        {
+            case 0x0:
+                return null;
+            case 0x8:
+                return false;
+            case 0x9:
+                return true;
+            default:
+                return {
+                    plistSimple: info
+                };
+        }
+    }
+    decodeInteger(
+        info,
+        offset
+    )
+    {
+        const byteCount =
+            1 << info;
+        return this.readUIntBE(
+            offset + 1,
+            byteCount
+        );
+    }
+    decodeReal(
+        info,
+        offset
+    )
+    {
+        const byteCount =
+            1 << info;
+        if (byteCount === 4)
+        {
+            const buffer =
+                this.bytes.buffer.slice(
+                    this.bytes.byteOffset +
+                    offset + 1,
+                    this.bytes.byteOffset +
+                    offset + 5
+                );
+            return new DataView(
+                buffer
+            ).getFloat32(
+                0,
+                false
+            );
+        }
+        if (byteCount === 8)
+        {
+            return this.readDoubleBE(
+                offset + 1
+            );
+        }
+        throw new Error(
+            "REAL plist non supporté."
+        );
+    }
+    decodeDate(
+        info,
+        offset
+    )
+    {
+        if (info !== 0x3)
+        {
+            throw new Error(
+                "DATE plist invalide."
+            );
+        }
+        return this.readDoubleBE(
+            offset + 1
+        );
+    }
+    decodeData(
+        info,
+        offset
+    )
+    {
+        const result =
+            this.decodeLength(
+                info,
+                offset
+            );
+        return this.bytes.slice(
+            result.offset,
+            result.offset +
+            result.length
+        );
+    }
+    decodeASCII(
+        info,
+        offset
+    )
+    {
+        const result =
+            this.decodeLength(
+                info,
+                offset
+            );
+        let text = "";
+        for (
+            let i = 0;
+            i < result.length;
+            i++
+        )
+        {
+            text += String.fromCharCode(
+                this.bytes[
+                    result.offset + i
+                ]
+            );
+        }
+        return text;
+    }
+    decodeUTF16(
+        info,
+        offset
+    )
+    {
+        const result =
+            this.decodeLength(
+                info,
+                offset
+            );
+        let text = "";
+        for (
+            let i = 0;
+            i < result.length;
+            i++
+        )
+        {
+            const p =
+                result.offset +
+                i * 2;
+            const code =
+                (this.bytes[p] << 8) |
+                this.bytes[p + 1];
+            text += String.fromCharCode(
+                code
+            );
+        }
+        return text;
+    }
+    decodeUID(
+        info,
+        offset
+    )
+    {
+        const length =
+            info + 1;
+        let value = 0;
+        for (
+            let i = 0;
+            i < length;
+            i++
+        )
+        {
+            value =
+                value * 256 +
+                this.bytes[
+                    offset + 1 + i
+                ];
+        }
+        return {
+            uid: value
+        };
+    }
+    decodeArray(
+        info,
+        offset
+    )
+    {
+        const result =
+            this.decodeLength(
+                info,
+                offset
+            );
+        let pos =
+            result.offset;
+        const array =
+            new Array(
+                result.length
+            );
+        for (
+            let i = 0;
+            i < result.length;
+            i++
+        )
+        {
+            const ref =
+                this.readUIntBE(
+                    pos,
+                    this.objectRefSize
+                );
+            pos +=
+                this.objectRefSize;
+            array[i] =
+                this.decodeObject(
+                    ref
+                );
+        }
+        return array;
+    }
+    decodeDictionary(
+        info,
+        offset
+    )
+    {
+        const result =
+            this.decodeLength(
+                info,
+                offset
+            );
+        const count =
+            result.length;
+        let pos =
+            result.offset;
+        const keyRefs =
+            new Array(count);
+        const valueRefs =
+            new Array(count);
+        for (
+            let i = 0;
+            i < count;
+            i++
+        )
+        {
+            keyRefs[i] =
+                this.readUIntBE(
+                    pos,
+                    this.objectRefSize
+                );
+            pos +=
+                this.objectRefSize;
+        }
+        for (
+            let i = 0;
+            i < count;
+            i++
+        )
+        {
+            valueRefs[i] =
+                this.readUIntBE(
+                    pos,
+                    this.objectRefSize
+                );
+            pos +=
+                this.objectRefSize;
+        }
+        const dictionary = {};
+        for (
+            let i = 0;
+            i < count;
+            i++
+        )
+        {
+            const key =
+                this.decodeObject(
+                    keyRefs[i]
+                );
+            const value =
+                this.decodeObject(
+                    valueRefs[i]
+                );
+            dictionary[key] =
+                value;
+        }
+        return dictionary;
     }
 }
-function isUID(object) {
-    return object &&
-        typeof object === "object" &&
-        object.__uid === true &&
-        Number.isInteger(object.uid);
+function isUID(value)
+{
+    return (
+        value &&
+        typeof value === "object" &&
+        Object.prototype.hasOwnProperty.call(
+            value,
+            "uid"
+        )
+    );
 }
-class KeyedArchiveResolver {
-    constructor(plist) {
+class KeyedArchiveResolver
+{
+    constructor(plist, decoderObjects = null)
+    {
         this.plist = plist;
+        this.rootObject = null;
         this.objects = plist["$objects"];
+        if (!Array.isArray(this.objects))
+        {
+            if (Array.isArray(decoderObjects) && Array.isArray(plist["NS.keys"]) && Array.isArray(plist["NS.objects"]))
+            {
+                this.objects = decoderObjects;
+                this.rootObject = plist;
+            }
+            else
+            {
+                throw new Error("Objets NSKeyedArchiver absents ou invalides.");
+            }
+        }
         this.cache = new Map();
         this.resolving = new Set();
     }
-    resolveUID(uid) {
-        return this.resolveIndex(uid.uid);
+    resolveUID(uidObject)
+    {
+        if (!isUID(uidObject))
+        {
+            return uidObject;
+        }
+        return this.resolveIndex(
+            uidObject.uid
+        );
     }
-    resolveIndex(index) {
-        if (this.cache.has(index)) {
-            return this.cache.get(index);
+    resolveIndex(index)
+    {
+        if (
+            index < 0 ||
+            index >= this.objects.length
+        )
+        {
+            throw new Error(
+                "UID hors limites : " +
+                index
+            );
         }
-        if (index < 0 || index >= this.objects.length) {
-            throw new Error("UID hors limites : " + index);
+        if (
+            this.cache.has(index)
+        )
+        {
+            return this.cache.get(
+                index
+            );
         }
-        const object = this.objects[index];
-        if (object === "$null" || object === null) {
-            this.cache.set(index, null);
+        if (
+            this.resolving.has(index)
+        )
+        {
+            return {
+                "$circularUID": index
+            };
+        }
+        const object =
+            this.objects[index];
+        if (
+            object === "$null" ||
+            object === null
+        )
+        {
+            this.cache.set(
+                index,
+                null
+            );
             return null;
         }
-        if (this.resolving.has(index)) {
-            throw new Error("Référence circulaire UID " + index);
-        }
-        this.resolving.add(index);
+        this.resolving.add(
+            index
+        );
         let result;
-        try {
-            result = this.resolveObject(object);
-        } finally {
-            this.resolving.delete(index);
+        try
+        {
+            result =
+                this.resolveObject(
+                    object
+                );
         }
-        this.cache.set(index, result);
+        finally
+        {
+            this.resolving.delete(
+                index
+            );
+        }
+        this.cache.set(
+            index,
+            result
+        );
         return result;
     }
-    resolveObject(object) {
-        if (isUID(object)) {
-            return this.resolveIndex(object.uid);
+    resolveObject(object)
+    {
+        if (isUID(object))
+        {
+            return this.resolveIndex(
+                object.uid
+            );
         }
-        if (Array.isArray(object)) {
-            return object.map(value => this.resolveObject(value));
+        if (Array.isArray(object))
+        {
+            return object.map(
+                value =>
+                    this.resolveObject(
+                        value
+                    )
+            );
         }
-        if (object === null || typeof object !== "object") {
+        if (
+            object === null ||
+            typeof object !== "object"
+        )
+        {
             return object;
         }
-        if (object["NS.data"] instanceof Uint8Array) {
+        if (
+            object["NS.data"] instanceof
+            Uint8Array
+        )
+        {
             return object["NS.data"];
         }
         if (
-            object["NSRangeCount"] !== undefined &&
-            object["NSRangeData"] !== undefined
-        ) {
+            object["NSRangeCount"] !==
+            undefined &&
+            object["NSRangeData"] !==
+            undefined
+        )
+        {
             return {
                 type: "NSIndexSet",
-                count: object["NSRangeCount"],
-                rangeData: this.resolveObject(
-                    object["NSRangeData"]
-                )
+                count:
+                    object["NSRangeCount"],
+                rangeData:
+                    this.resolveObject(
+                        object["NSRangeData"]
+                    )
             };
         }
         if (
-            Array.isArray(object["NS.keys"]) &&
-            Array.isArray(object["NS.objects"])
-        ) {
+            Array.isArray(
+                object["NS.keys"]
+            ) &&
+            Array.isArray(
+                object["NS.objects"]
+            )
+        )
+        {
             const dictionary = {};
-            const keys = object["NS.keys"];
-            const values = object["NS.objects"];
-            for (let i = 0; i < keys.length; i++) {
-                const key = this.resolveObject(keys[i]);
-                const value = this.resolveObject(values[i]);
-                dictionary[key] = value;
+            const keys =
+                object["NS.keys"];
+            const values =
+                object["NS.objects"];
+            for (
+                let i = 0;
+                i < keys.length;
+                i++
+            )
+            {
+                const key =
+                    this.resolveObject(
+                        keys[i]
+                    );
+                const value =
+                    this.resolveObject(
+                        values[i]
+                    );
+                dictionary[key] =
+                    value;
             }
             return dictionary;
         }
         const result = {};
-        for (const key of Object.keys(object)) {
-            if (key === "$class") continue;
-            result[key] = this.resolveObject(object[key]);
+        for (
+            const key of Object.keys(
+                object
+            )
+        )
+        {
+            if (key === "$class")
+            {
+                continue;
+            }
+            result[key] =
+                this.resolveObject(
+                    object[key]
+                );
         }
         return result;
     }
-    root() {
+    root()
+    {
+        if (this.rootObject)
+        {
+            console.log("Racine NSKeyedArchiver : dictionnaire NS.keys/NS.objects");
+            return this.resolveObject(this.rootObject);
+        }
         const top = this.plist["$top"];
-        if (!top) {
+        if (!top)
+        {
             throw new Error("$top absent.");
         }
         const rootUID = top["root"];
-        if (!rootUID) {
+        if (!rootUID)
+        {
             throw new Error("root absent dans $top.");
         }
         console.log("UID racine :", rootUID.uid);
         return this.resolveUID(rootUID);
     }
 }
-function decodeGrilleArchive(decoded)
+function decodeGrilleArchive(
+    decoded
+)
 {
-    console.log("================================");
-    console.log("DECODAGE BINARY PLIST");
-    console.log("Taille :", decoded.length);
-    const decoder = new BinaryPlistDecoder(decoded);
-    const rootObject = decoder.decode();
-    window.lastPlist = rootObject;
-    window.lastPlistDecoder = decoder;
-    console.log("Plist décodé :", rootObject);
-    console.log("Clés plist racine :", Object.keys(rootObject));
-    if (!rootObject || !Array.isArray(rootObject["NS.keys"]) || !Array.isArray(rootObject["NS.objects"]))
-    {
-        throw new Error("Racine NSDictionary NSKeyedArchiver invalide.");
-    }
-    console.log("Racine NSDictionary NSKeyedArchiver détectée.");
-    const dictionary = {};
-    const keys = rootObject["NS.keys"];
-    const values = rootObject["NS.objects"];
-    if (keys.length !== values.length)
-    {
-        throw new Error("NS.keys et NS.objects ont des tailles différentes.");
-    }
-    for (let i = 0; i < keys.length; i++)
-    {
-        dictionary[keys[i]] = values[i];
-    }
-    console.log("Dictionnaire archive :", dictionary);
-    const resolver = new KeyedArchiveResolver(dictionary);
-    window.lastArchiveResolver = resolver;
-    const root = resolver.root();
-    window.lastArchiveRoot = root;
-    console.log("Racine archive résolue :", root);
-    if (!root || typeof root !== "object")
+    console.log(
+        "================================"
+    );
+    console.log(
+        "DECODAGE BINARY PLIST"
+    );
+    console.log(
+        "Taille :",
+        decoded.length
+    );
+    const decoder =
+        new BinaryPlistDecoder(
+            decoded
+        );
+    const plist =
+        decoder.decode();
+    window.lastPlist =
+        plist;
+    window.lastPlistDecoder =
+        decoder;
+    console.log(
+        "Plist décodé :",
+        plist
+    );
+    console.log(
+        "Clés plist racine :",
+        Object.keys(plist)
+    );
+    if (!plist || !Array.isArray(plist["NS.keys"]) || !Array.isArray(plist["NS.objects"]))
     {
         throw new Error("Racine NSKeyedArchiver invalide.");
     }
+    console.log("Racine NSKeyedArchiver détectée.");
+    const resolver =
+        new KeyedArchiveResolver(
+            plist,
+            decoder.objects
+        );
+    window.lastArchiveResolver =
+        resolver;
+    const root =
+        resolver.root();
+    window.lastArchiveRoot =
+        root;
+    console.log(
+        "OBJET RACINE NSKEYEDARCHIVER :",
+        root
+    );
     return root;
 }
-function extractGrilleData(root) {
-    console.log("================================");
-    console.log("EXTRACTION DONNÉES GRILLE");
-    if (!root || typeof root !== "object") {
-        throw new Error("Objet racine NSKeyedArchiver invalide.");
+function extractGrilleData(root)
+{
+    console.log(
+        "================================"
+    );
+    console.log(
+        "EXTRACTION DONNÉES GRILLE"
+    );
+    if (!root || typeof root !== "object")
+    {
+        throw new Error(
+            "Objet racine NSKeyedArchiver invalide."
+        );
     }
-    const result = root;
-    const expectedKeys = [
+    console.log(
+        "Type root :",
+        typeof root
+    );
+    console.log(
+        "Clés root :",
+        Object.keys(root)
+    );
+    const result =
+        root;
+    const expectedKeys =
+    [
         "GRILLE",
         "COULEUR",
         "PALETTE",
@@ -567,253 +1171,467 @@ function extractGrilleData(root) {
         "TILESIZE",
         "TILEORIGIN"
     ];
-    for (const key of expectedKeys) {
-        if (Object.prototype.hasOwnProperty.call(result, key)) {
-            console.log(key + " :", result[key]);
-        } else {
-            console.warn("Clé absente :", key);
+    for (
+        const key of expectedKeys
+    )
+    {
+        if (
+            Object.prototype.hasOwnProperty.call(
+                result,
+                key
+            )
+        )
+        {
+            console.log(
+                key + " :",
+                result[key]
+            );
+        }
+        else
+        {
+            console.warn(
+                "Clé absente :",
+                key
+            );
         }
     }
-    console.log("================================");
+    console.log(
+        "================================"
+    );
     return result;
 }
-async function loadGrilleFile(file) {
-    console.log("===============================");
-    console.log("OUVERTURE GRILLE");
-    console.log("Nom :", file.name);
-    console.log("Taille fichier :", file.size);
-    console.log("Type :", file.type);
-    console.log("===============================");
-    if (!lzfseModule) {
-        throw new Error("Le module LZFSE n'est pas prêt.");
-    }
-    const buffer = await file.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
-    if (bytes.length < 8) {
-        throw new Error("Fichier grille trop court.");
-    }
-    const view = new DataView(
-        bytes.buffer,
-        bytes.byteOffset,
-        bytes.byteLength
+async function loadGrilleFile(
+    file
+)
+{
+    console.log(
+        "==============================="
     );
-    const originalSizeNumber = view.getBigUint64(0, true);
-    const originalSize = Number(originalSizeNumber);
-    if (!Number.isSafeInteger(originalSize) || originalSize <= 0) {
+    console.log(
+        "OUVERTURE GRILLE"
+    );
+    console.log(
+        "Nom :",
+        file.name
+    );
+    console.log(
+        "Taille fichier :",
+        file.size
+    );
+    console.log(
+        "Type :",
+        file.type
+    );
+    console.log(
+        "==============================="
+    );
+    if (!lzfseModule)
+    {
         throw new Error(
-            "Taille originale invalide : " +
-            originalSizeNumber.toString()
+            "Le module LZFSE n'est pas prêt."
         );
     }
-    console.log("Taille originale annoncée :", originalSize);
-    const compressed = bytes.slice(8);
-    console.log("Taille LZFSE :", compressed.length);
-    const signature = String.fromCharCode(
-        compressed[0] || 0,
-        compressed[1] || 0,
-        compressed[2] || 0,
-        compressed[3] || 0
+    const buffer =
+        await file.arrayBuffer();
+    const bytes =
+        new Uint8Array(
+            buffer
+        );
+    console.log(
+        "Buffer reçu :",
+        bytes.length,
+        "octets"
     );
-    console.log("Signature LZFSE :", signature);
-    if (signature !== "bvx2") {
-        console.warn(
-            "Signature LZFSE inattendue :",
-            signature
+    if (
+        bytes.length < 8
+    )
+    {
+        throw new Error(
+            "Fichier .grille trop court."
         );
     }
-    const decoded = await decompressLZFSE(
-        compressed,
+    const view =
+        new DataView(
+            buffer
+        );
+    const originalSizeBig =
+        view.getBigUint64(
+            0,
+            true
+        );
+    const originalSize =
+        Number(
+            originalSizeBig
+        );
+    console.log(
+        "Taille originale annoncée :",
         originalSize
     );
-    const root = decodeGrilleArchive(decoded);
-    const data = extractGrilleData(root);
-    if (!(data["GRILLE"] instanceof Uint8Array)) {
-        throw new Error("GRILLE ne contient pas de NSData.");
-    }
-    if (!(data["COULEUR"] instanceof Uint8Array)) {
-        throw new Error("COULEUR ne contient pas de NSData.");
-    }
-    if (!(data["PALETTE"] instanceof Uint8Array)) {
-        throw new Error("PALETTE ne contient pas de NSData.");
-    }
-    const grilleImage = await imageFromPNGData(data["GRILLE"]);
-    const couleurImage = await imageFromPNGData(data["COULEUR"]);
-    const palette = await imageFromPNGData(data["PALETTE"]);
-    sourceImage = grilleImage;
-    colorImage = couleurImage;
-    paletteImage = palette;
-    if (typeof data["TILESIZE"] === "number") {
-        tileSize = Math.max(
-            2,
-            Math.min(100, data["TILESIZE"] * 2)
+    if (
+        !Number.isSafeInteger(
+            originalSize
+        ) ||
+        originalSize <= 0
+    )
+    {
+        throw new Error(
+            "Taille originale invalide."
         );
-        if (tileSizeInput) {
-            tileSizeInput.value = tileSize;
-        }
     }
-    selectedTiles.clear();
-    if (data["ENCOURS"] &&
-        data["ENCOURS"].type === "NSIndexSet") {
-        const indexes = decodeNSIndexSet(
-            data["ENCOURS"]
+    const compressed =
+        bytes.subarray(
+            8
         );
-        for (const index of indexes) {
-            let finalIndex = index;
-            if (data["TILEORIGIN"] !== 1) {
-                const macRow = Math.floor(index / cols);
-                const col = index % cols;
-                const ipadRow = rows - 1 - macRow;
-                finalIndex = ipadRow * cols + col;
-            }
-            selectedTiles.add(finalIndex);
-        }
-    }
-    recomputeGrid();
-    if (data["ENCOURS"] &&
-        data["ENCOURS"].type === "NSIndexSet" &&
-        data["TILEORIGIN"] !== 1) {
-        selectedTiles.clear();
-        const indexes = decodeNSIndexSet(
-            data["ENCOURS"]
-        );
-        for (const index of indexes) {
-            const macRow = Math.floor(index / cols);
-            const col = index % cols;
-            const ipadRow = rows - 1 - macRow;
-            if (
-                ipadRow >= 0 &&
-                ipadRow < rows &&
-                col >= 0 &&
-                col < cols
-            ) {
-                selectedTiles.add(
-                    ipadRow * cols + col
-                );
-            }
-        }
-    }
-    resetCamera();
-    draw();
-    if (info) {
-        info.textContent =
-            `${cols} × ${rows} — ${selectedTiles.size} sélectionnées`;
-    }
-    console.log("Grille chargée :", cols, "x", rows);
-}
-function imageFromPNGData(data) {
-    return new Promise(function (resolve, reject) {
-        const blob = new Blob(
-            [data],
-            { type: "image/png" }
-        );
-        const url = URL.createObjectURL(blob);
-        const image = new Image();
-        image.onload = function () {
-            URL.revokeObjectURL(url);
-            resolve(image);
-        };
-        image.onerror = function () {
-            URL.revokeObjectURL(url);
-            reject(
-                new Error("Impossible de décoder l'image PNG.")
+    console.log(
+        "Taille LZFSE :",
+        compressed.length
+    );
+    if (
+        compressed.length >= 4
+    )
+    {
+        const signature =
+            String.fromCharCode(
+                compressed[0],
+                compressed[1],
+                compressed[2],
+                compressed[3]
             );
-        };
-        image.src = url;
-    });
+        console.log(
+            "Signature LZFSE :",
+            signature
+        );
+        if (
+            signature !== "bvx2"
+        )
+        {
+            console.warn(
+                "Signature LZFSE inattendue :",
+                signature
+            );
+        }
+    }
+    const decoded =
+        await decompressLZFSE(
+            compressed,
+            originalSize
+        );
+    console.log(
+        "Décompression terminée :",
+        decoded.length,
+        "octets"
+    );
+    window.lastDecodedGrille =
+        decoded;
+    const root =
+        decodeGrilleArchive(
+            decoded
+        );
+    const grilleData =
+        extractGrilleData(
+            root
+        );
+    window.lastGrilleArchive =
+        grilleData;
+    console.log(
+        "================================"
+    );
+    console.log(
+        "ARCHIVE GRILLE"
+    );
+    console.log(
+        "GRILLE :",
+        grilleData.GRILLE
+    );
+    console.log(
+        "COULEUR :",
+        grilleData.COULEUR
+    );
+    console.log(
+        "PALETTE :",
+        grilleData.PALETTE
+    );
+    console.log(
+        "ENCOURS :",
+        grilleData.ENCOURS
+    );
+    console.log(
+        "TILESIZE :",
+        grilleData.TILESIZE
+    );
+    console.log(
+        "TILEORIGIN :",
+        grilleData.TILEORIGIN
+    );
+    console.log(
+        "================================"
+    );
+    if (
+        grilleData.GRILLE instanceof
+        Uint8Array
+    )
+    {
+        sourceImage =
+            await imageFromBytes(
+                grilleData.GRILLE
+            );
+    }
+    if (
+        grilleData.COULEUR instanceof
+        Uint8Array
+    )
+    {
+        colorImage =
+            await imageFromBytes(
+                grilleData.COULEUR
+            );
+    }
+    if (
+        grilleData.PALETTE instanceof
+        Uint8Array
+    )
+    {
+        paletteImage =
+            await imageFromBytes(
+                grilleData.PALETTE
+            );
+    }
+    if (
+        typeof grilleData.TILESIZE ===
+        "number"
+    )
+    {
+        tileSize =
+            Math.max(
+                2,
+                grilleData.TILESIZE * 2
+            );
+        const tileSizeInput =
+            document.getElementById(
+                "tileSize"
+            );
+        if (tileSizeInput)
+        {
+            tileSizeInput.value =
+                tileSize;
+        }
+    }
+    selectedTiles =
+        decodeNSIndexSet(
+            grilleData.ENCOURS
+        );
+    console.log(
+        "Cases sélectionnées :",
+        selectedTiles.size
+    );
+    recomputeGrid();
+    draw();
+    const info =
+        document.getElementById(
+            "info"
+        );
+    if (info)
+    {
+        info.textContent =
+            sourceImage
+                ? sourceImage.width +
+                  " × " +
+                  sourceImage.height +
+                  " — " +
+                  cols +
+                  " × " +
+                  rows
+                : "Grille chargée";
+    }
+    console.log(
+        "GRILLE CHARGÉE"
+    );
+    console.log(
+        "================================"
+    );
 }
-function decodeNSIndexSet(indexSet) {
-    if (!indexSet ||
-        indexSet.type !== "NSIndexSet") {
-        return [];
-    }
-    const data = indexSet.rangeData;
-    if (!(data instanceof Uint8Array)) {
-        return [];
-    }
-    const result = [];
-    if (indexSet.count <= 0) {
+function imageFromBytes(
+    bytes
+)
+{
+    return new Promise(
+        function (resolve, reject)
+        {
+            const blob =
+                new Blob(
+                    [bytes],
+                    {
+                        type: "image/png"
+                    }
+                );
+            const url =
+                URL.createObjectURL(
+                    blob
+                );
+            const image =
+                new Image();
+            image.onload =
+                function ()
+                {
+                    URL.revokeObjectURL(
+                        url
+                    );
+                    resolve(
+                        image
+                    );
+                };
+            image.onerror =
+                function ()
+                {
+                    URL.revokeObjectURL(
+                        url
+                    );
+                    reject(
+                        new Error(
+                            "Impossible de décoder l'image PNG."
+                        )
+                    );
+                };
+            image.src =
+                url;
+        }
+    );
+}
+function decodeNSIndexSet(value) {
+    const result = new Set();
+    if (!value) return result;
+    if (Array.isArray(value)) {
+        for (const index of value) {
+            if (Number.isInteger(index)) result.add(index);
+        }
         return result;
     }
-    /*
-     * NSIndexSet archivé par NSKeyedArchiver :
-     * NSRangeCount = nombre de ranges.
-     * NSRangeData contient les paires location,length.
-     *
-     * Sur les fichiers concernés, chaque NSRange est stocké
-     * avec deux UInt64 little-endian.
-     */
-    const rangeSize = 16;
-    const rangeCount = indexSet.count;
-    if (data.length < rangeCount * rangeSize) {
+    if (value.type !== "NSIndexSet") {
+        console.warn("Objet NSIndexSet inattendu :", value);
+        return result;
+    }
+    const data = value.rangeData;
+    if (!(data instanceof Uint8Array)) {
+        console.warn("NSRangeData absent.");
+        return result;
+    }
+    function decodePackedUInt(bytes, offset) {
+        let first = bytes[offset++];
+        if (first < 128) {
+            return { value: first, nextOffset: offset };
+        }
+        let value = first - 128;
+        let multiplier = 128;
+        while (offset < bytes.length) {
+            const byte = bytes[offset++];
+            if (byte < 128) {
+                value += multiplier * byte;
+                return { value: value, nextOffset: offset };
+            }
+            value += multiplier * (byte - 128);
+            multiplier *= 128;
+        }
+        throw new Error(
+            "NSRangeData tronqué pendant le décodage PackedUIntSequence."
+        );
+    }
+    const integers = [];
+    let offset = 0;
+    while (offset < data.length) {
+        const decoded = decodePackedUInt(data, offset);
+        integers.push(decoded.value);
+        offset = decoded.nextOffset;
+    }
+    const expectedIntegerCount = value.count * 2;
+    if (integers.length !== expectedIntegerCount) {
         console.warn(
-            "NSRangeData plus court que prévu :",
-            data.length,
-            rangeCount
+            "Nombre d'entiers inattendu :",
+            integers.length,
+            "attendu :",
+            expectedIntegerCount
         );
     }
-    for (let i = 0; i < rangeCount; i++) {
-        const offset = i * rangeSize;
-        if (offset + rangeSize > data.length) {
-            break;
-        }
-        const view = new DataView(
-            data.buffer,
-            data.byteOffset + offset,
-            rangeSize
-        );
-        const locationBig = view.getBigUint64(0, true);
-        const lengthBig = view.getBigUint64(8, true);
-        const location = Number(locationBig);
-        const length = Number(lengthBig);
-        if (
-            !Number.isSafeInteger(location) ||
-            !Number.isSafeInteger(length)
-        ) {
-            console.warn("NSRange trop grand.");
-            continue;
-        }
-        for (
-            let j = 0;
-            j < length;
-            j++
-        ) {
-            result.push(location + j);
+    for (let i = 0; i + 1 < integers.length; i += 2) {
+        const location = integers[i];
+        const length = integers[i + 1];
+        if (length <= 0) continue;
+        for (let j = 0; j < length; j++) {
+            result.add(location + j);
         }
     }
+    console.log(
+        "NSIndexSet :",
+        value.count,
+        "plages,",
+        result.size,
+        "cases sélectionnées"
+    );
     return result;
 }
-function loadImageFile(file) {
-    console.log("Chargement image :", file.name);
-    const url = URL.createObjectURL(file);
-    const image = new Image();
-    image.onload = function () {
-        URL.revokeObjectURL(url);
-        sourceImage = image;
-        colorImage = null;
-        paletteImage = null;
-        selectedTiles.clear();
-        if (info) {
-            info.textContent =
-                `${image.naturalWidth} × ${image.naturalHeight}`;
-        }
-        recomputeGrid();
-        resetCamera();
-        draw();
-        console.log(
-            "Image chargée :",
-            image.naturalWidth,
-            "x",
-            image.naturalHeight
+async function loadImageFile(
+    file
+)
+{
+    console.log(
+        "Chargement image :",
+        file.name
+    );
+    const url =
+        URL.createObjectURL(
+            file
         );
-    };
-    image.onerror = function () {
-        URL.revokeObjectURL(url);
-        console.error(
-            "Impossible de charger l'image."
-        );
-        alert("Impossible de charger cette image.");
-    };
-    image.src = url;
+    const image =
+        new Image();
+    image.onload =
+        function ()
+        {
+            URL.revokeObjectURL(
+                url
+            );
+            sourceImage =
+                image;
+            colorImage =
+                null;
+            paletteImage =
+                null;
+            selectedTiles =
+                new Set();
+            recomputeGrid();
+            draw();
+            const info =
+                document.getElementById(
+                    "info"
+                );
+            if (info)
+            {
+                info.textContent =
+                    image.width +
+                    " × " +
+                    image.height +
+                    " — " +
+                    cols +
+                    " × " +
+                    rows;
+            }
+            console.log(
+                "Image chargée :",
+                image.width,
+                "x",
+                image.height
+            );
+        };
+    image.onerror =
+        function ()
+        {
+            URL.revokeObjectURL(
+                url
+            );
+            alert(
+                "Impossible de charger l'image."
+            );
+        };
+    image.src =
+        url;
 }
 function recomputeGrid() {
     if (!sourceImage) {
@@ -821,34 +1639,21 @@ function recomputeGrid() {
         rows = 0;
         return;
     }
-    cols = Math.ceil(
-        sourceImage.naturalWidth / tileSize
-    );
-    rows = Math.ceil(
-        sourceImage.naturalHeight / tileSize
-    );
+    cols = Math.ceil(sourceImage.naturalWidth / tileSize);
+    rows = Math.ceil(sourceImage.naturalHeight / tileSize);
     resizeCanvasToGrid();
     resetCamera();
 }
 function resizeCanvasToGrid() {
-    if (!canvas || cols <= 0 || rows <= 0) {
-        return;
-    }
+    if (!canvas || cols <= 0 || rows <= 0) return;
     const dpr = window.devicePixelRatio || 1;
     const worldWidth = cols * tileSize;
     const worldHeight = rows * tileSize;
-    canvas.width = Math.max(
-        1,
-        Math.round(worldWidth * dpr)
-    );
-    canvas.height = Math.max(
-        1,
-        Math.round(worldHeight * dpr)
-    );
-    canvas.style.width =
-        `${worldWidth}px`;
-    canvas.style.height =
-        `${worldHeight}px`;
+    canvas.width = Math.max(1, Math.round(worldWidth * dpr));
+    canvas.height = Math.max(1, Math.round(worldHeight * dpr));
+    canvas.style.width = worldWidth + "px";
+    canvas.style.height = worldHeight + "px";
+    canvas.style.transformOrigin = "0 0";
     applyCamera();
 }
 function getViewportSize() {
@@ -858,8 +1663,7 @@ function getViewportSize() {
             height: window.innerHeight
         };
     }
-    const rect =
-        workspace.getBoundingClientRect();
+    const rect = workspace.getBoundingClientRect();
     return {
         width: rect.width,
         height: rect.height
@@ -873,18 +1677,11 @@ function resetCamera() {
         applyCamera();
         return;
     }
-    const viewport =
-        getViewportSize();
-    const worldWidth =
-        cols * tileSize;
-    const worldHeight =
-        rows * tileSize;
-    if (
-        worldWidth <= 0 ||
-        worldHeight <= 0 ||
-        viewport.width <= 0 ||
-        viewport.height <= 0
-    ) {
+    const viewport = getViewportSize();
+    const worldWidth = cols * tileSize;
+    const worldHeight = rows * tileSize;
+    if (worldWidth <= 0 || worldHeight <= 0 ||
+        viewport.width <= 0 || viewport.height <= 0) {
         zoomFactor = 1;
         panX = 0;
         panY = 0;
@@ -892,136 +1689,69 @@ function resetCamera() {
         return;
     }
     const margin = 20;
-    const availableWidth =
-        Math.max(
-            1,
-            viewport.width - margin * 2
-        );
-    const availableHeight =
-        Math.max(
-            1,
-            viewport.height - margin * 2
-        );
+    const availableWidth = Math.max(1, viewport.width - margin * 2);
+    const availableHeight = Math.max(1, viewport.height - margin * 2);
     zoomFactor = Math.min(
         availableWidth / worldWidth,
         availableHeight / worldHeight
     );
-    zoomFactor = Math.max(
-        0.05,
-        Math.min(10, zoomFactor)
-    );
-    panX =
-        (viewport.width -
-            worldWidth * zoomFactor) *
-        0.5;
-    panY =
-        (viewport.height -
-            worldHeight * zoomFactor) *
-        0.5;
+    zoomFactor = clampZoom(zoomFactor);
+    panX = (viewport.width - worldWidth * zoomFactor) * 0.5;
+    panY = (viewport.height - worldHeight * zoomFactor) * 0.5;
     applyCamera();
 }
 function applyCamera() {
-    if (!canvas) {
-        return;
-    }
+    if (!canvas) return;
+    canvas.style.transformOrigin = "0 0";
     canvas.style.transform =
-        `translate(${panX}px, ${panY}px) scale(${zoomFactor})`;
+        "translate(" + panX + "px, " + panY + "px) " +
+        "scale(" + zoomFactor + ")";
 }
-function canvasPointFromClient(
-    clientX,
-    clientY
-) {
-    if (!workspace) {
-        return {
-            x: 0,
-            y: 0
-        };
-    }
-    const rect =
-        workspace.getBoundingClientRect();
-    const screenX =
-        clientX - rect.left;
-    const screenY =
-        clientY - rect.top;
+function updateCanvasTransform() {
+    applyCamera();
+}
+function canvasPointFromClient(clientX, clientY) {
+    const rect = workspace.getBoundingClientRect();
+    const screenX = clientX - rect.left;
+    const screenY = clientY - rect.top;
     return {
-        x:
-            (screenX - panX) /
-            zoomFactor,
-        y:
-            (screenY - panY) /
-            zoomFactor
+        x: (screenX - panX) / zoomFactor,
+        y: (screenY - panY) / zoomFactor
     };
 }
-function worldPointToScreen(
-    x,
-    y
-) {
+function worldPointToScreen(x, y) {
     return {
-        x:
-            panX +
-            x * zoomFactor,
-        y:
-            panY +
-            y * zoomFactor
+        x: panX + x * zoomFactor,
+        y: panY + y * zoomFactor
     };
 }
 function clampZoom(value) {
-    return Math.max(
-        0.05,
-        Math.min(10.0, value)
-    );
+    return Math.max(0.05, Math.min(10.0, value));
 }
 function handleWorkspaceResize() {
-    if (!canvas || cols <= 0 || rows <= 0) {
-        return;
-    }
-    const viewport =
-        getViewportSize();
-    const centerScreenX =
-        viewport.width * 0.5;
-    const centerScreenY =
-        viewport.height * 0.5;
+    if (!canvas || cols <= 0 || rows <= 0) return;
+    const viewport = getViewportSize();
+    const centerScreenX = viewport.width * 0.5;
+    const centerScreenY = viewport.height * 0.5;
     const centerWorldX =
-        (centerScreenX - panX) /
-        zoomFactor;
+        (centerScreenX - panX) / zoomFactor;
     const centerWorldY =
-        (centerScreenY - panY) /
-        zoomFactor;
-    panX =
-        centerScreenX -
-        centerWorldX * zoomFactor;
-    panY =
-        centerScreenY -
-        centerWorldY * zoomFactor;
+        (centerScreenY - panY) / zoomFactor;
+    panX = centerScreenX - centerWorldX * zoomFactor;
+    panY = centerScreenY - centerWorldY * zoomFactor;
     applyCamera();
 }
-function tileIndexForPoint(
-    x,
-    y
-) {
-    const col =
-        Math.floor(x / tileSize);
-    const row =
-        Math.floor(y / tileSize);
-    if (
-        col < 0 ||
-        col >= cols ||
-        row < 0 ||
-        row >= rows
-    ) {
+function tileIndexForPoint(x, y) {
+    const col = Math.floor(x / tileSize);
+    const row = Math.floor(y / tileSize);
+    if (col < 0 || col >= cols || row < 0 || row >= rows) {
         return -1;
     }
     return row * cols + col;
 }
-function toggleTileAt(
-    x,
-    y
-) {
-    const index =
-        tileIndexForPoint(x, y);
-    if (index < 0) {
-        return;
-    }
+function toggleTileAt(x, y) {
+    const index = tileIndexForPoint(x, y);
+    if (index < 0) return;
     if (selectedTiles.has(index)) {
         selectedTiles.delete(index);
     } else {
@@ -1029,121 +1759,61 @@ function toggleTileAt(
     }
     draw();
 }
-function selectTileAt(
-    x,
-    y
-) {
-    const index =
-        tileIndexForPoint(x, y);
-    if (index < 0) {
-        return;
-    }
+function selectTileAt(x, y) {
+    const index = tileIndexForPoint(x, y);
+    if (index < 0) return;
     if (!selectedTiles.has(index)) {
         selectedTiles.add(index);
         draw();
     }
 }
-function pointerScreenPoint(
-    event
-) {
-    const rect =
-        workspace.getBoundingClientRect();
+function pointerScreenPoint(event) {
+    const rect = workspace.getBoundingClientRect();
     return {
-        x:
-            event.clientX -
-            rect.left,
-        y:
-            event.clientY -
-            rect.top
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top
     };
 }
-function pointerWorldPoint(
-    event
-) {
-    return canvasPointFromClient(
-        event.clientX,
-        event.clientY
-    );
+function pointerWorldPoint(event) {
+    return canvasPointFromClient(event.clientX, event.clientY);
 }
-function distanceBetweenPointers(
-    a,
-    b
-) {
-    const dx =
-        b.x - a.x;
-    const dy =
-        b.y - a.y;
-    return Math.hypot(dx, dy);
+function distanceBetweenPointers(a, b) {
+    return Math.hypot(b.x - a.x, b.y - a.y);
 }
-function centerBetweenPointers(
-    a,
-    b
-) {
+function centerBetweenPointers(a, b) {
     return {
-        x:
-            (a.x + b.x) *
-            0.5,
-        y:
-            (a.y + b.y) *
-            0.5
+        x: (a.x + b.x) * 0.5,
+        y: (a.y + b.y) * 0.5
     };
 }
 function setupPinch() {
-    const pointers =
-        Array.from(
-            activePointers.values()
-        );
-    if (pointers.length !== 2) {
-        return;
-    }
+    const pointers = Array.from(activePointers.values());
+    if (pointers.length !== 2) return;
     lastPinchDistance =
-        distanceBetweenPointers(
-            pointers[0],
-            pointers[1]
-        );
+        distanceBetweenPointers(pointers[0], pointers[1]);
     lastPinchCenter =
-        centerBetweenPointers(
-            pointers[0],
-            pointers[1]
-        );
+        centerBetweenPointers(pointers[0], pointers[1]);
     pinchActive = true;
 }
-function handlePointerDown(
-    event
-) {
-    if (!sourceImage) {
-        return;
-    }
+function handlePointerDown(event) {
+    if (!sourceImage) return;
     event.preventDefault();
     try {
-        workspace.setPointerCapture(
-            event.pointerId
-        );
+        workspace.setPointerCapture(event.pointerId);
     } catch (_) {}
-    const screen =
-        pointerScreenPoint(event);
-    activePointers.set(
-        event.pointerId,
-        {
-            id: event.pointerId,
-            pointerType:
-                event.pointerType,
-            x: screen.x,
-            y: screen.y
-        }
-    );
+    const screen = pointerScreenPoint(event);
+    activePointers.set(event.pointerId, {
+        id: event.pointerId,
+        pointerType: event.pointerType,
+        x: screen.x,
+        y: screen.y
+    });
     if (activePointers.size === 1) {
-        singlePointerId =
-            event.pointerId;
-        singlePointerMoved =
-            false;
-        singlePointerWorld =
-            pointerWorldPoint(event);
+        singlePointerId = event.pointerId;
+        singlePointerMoved = false;
+        singlePointerWorld = pointerWorldPoint(event);
         pinchActive = false;
-        if (
-            event.pointerType !==
-            "touch"
-        ) {
+        if (event.pointerType !== "touch") {
             toggleTileAt(
                 singlePointerWorld.x,
                 singlePointerWorld.y
@@ -1156,270 +1826,135 @@ function handlePointerDown(
         setupPinch();
     }
 }
-function handlePointerMove(
-    event
-) {
-    const pointer =
-        activePointers.get(
-            event.pointerId
-        );
-    if (
-        !pointer ||
-        !sourceImage
-    ) {
-        return;
-    }
+function handlePointerMove(event) {
+    const pointer = activePointers.get(event.pointerId);
+    if (!pointer || !sourceImage) return;
     event.preventDefault();
-    const screen =
-        pointerScreenPoint(event);
+    const screen = pointerScreenPoint(event);
     pointer.x = screen.x;
     pointer.y = screen.y;
     if (activePointers.size >= 2) {
-        const pointers =
-            Array.from(
-                activePointers.values()
-            );
+        const pointers = Array.from(activePointers.values());
         const a = pointers[0];
         const b = pointers[1];
-        const distance =
-            distanceBetweenPointers(
-                a,
-                b
-            );
-        const center =
-            centerBetweenPointers(
-                a,
-                b
-            );
-        if (
-            lastPinchDistance > 0 &&
-            lastPinchCenter
-        ) {
+        const distance = distanceBetweenPointers(a, b);
+        const center = centerBetweenPointers(a, b);
+        if (lastPinchDistance > 0 && lastPinchCenter) {
             const worldX =
-                (lastPinchCenter.x -
-                    panX) /
-                zoomFactor;
+                (lastPinchCenter.x - panX) / zoomFactor;
             const worldY =
-                (lastPinchCenter.y -
-                    panY) /
-                zoomFactor;
+                (lastPinchCenter.y - panY) / zoomFactor;
             let newZoom =
-                zoomFactor *
-                (distance /
-                    lastPinchDistance);
-            newZoom =
-                clampZoom(
-                    newZoom
-                );
-            panX =
-                center.x -
-                worldX * newZoom;
-            panY =
-                center.y -
-                worldY * newZoom;
-            zoomFactor =
-                newZoom;
+                zoomFactor * (distance / lastPinchDistance);
+            newZoom = clampZoom(newZoom);
+            panX = center.x - worldX * newZoom;
+            panY = center.y - worldY * newZoom;
+            zoomFactor = newZoom;
             applyCamera();
         }
-        lastPinchDistance =
-            distance;
-        lastPinchCenter =
-            center;
+        lastPinchDistance = distance;
+        lastPinchCenter = center;
         pinchActive = true;
         return;
     }
-    if (
-        activePointers.size !== 1 ||
-        event.pointerId !==
-            singlePointerId
-    ) {
+    if (activePointers.size !== 1 ||
+        event.pointerId !== singlePointerId) {
         return;
     }
-    const world =
-        pointerWorldPoint(event);
+    const world = pointerWorldPoint(event);
     if (singlePointerWorld) {
-        const dx =
-            world.x -
-            singlePointerWorld.x;
-        const dy =
-            world.y -
-            singlePointerWorld.y;
-        if (
-            Math.abs(dx) > 0.5 ||
-            Math.abs(dy) > 0.5
-        ) {
-            singlePointerMoved =
-                true;
+        const dx = world.x - singlePointerWorld.x;
+        const dy = world.y - singlePointerWorld.y;
+        if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+            singlePointerMoved = true;
         }
     }
-    singlePointerWorld =
-        world;
-    if (
-        event.pointerType ===
-            "touch" ||
-        event.buttons !== 0
-    ) {
-        selectTileAt(
-            world.x,
-            world.y
-        );
+    singlePointerWorld = world;
+    if (event.pointerType === "touch" || event.buttons !== 0) {
+        selectTileAt(world.x, world.y);
     }
 }
-function handlePointerUp(
-    event
-) {
-    const pointer =
-        activePointers.get(
-            event.pointerId
-        );
-    if (!pointer) {
-        return;
-    }
+function handlePointerUp(event) {
+    const pointer = activePointers.get(event.pointerId);
+    if (!pointer) return;
     event.preventDefault();
-    const wasTouch =
-        pointer.pointerType ===
-        "touch";
-    if (
-        wasTouch &&
+    const wasTouch = pointer.pointerType === "touch";
+    if (wasTouch &&
         activePointers.size === 1 &&
-        event.pointerId ===
-            singlePointerId &&
+        event.pointerId === singlePointerId &&
         !singlePointerMoved &&
-        !pinchActive
-    ) {
-        const world =
-            pointerWorldPoint(event);
-        toggleTileAt(
-            world.x,
-            world.y
-        );
+        !pinchActive) {
+        const world = pointerWorldPoint(event);
+        toggleTileAt(world.x, world.y);
     }
-    activePointers.delete(
-        event.pointerId
-    );
+    activePointers.delete(event.pointerId);
     if (activePointers.size < 2) {
         lastPinchDistance = 0;
         lastPinchCenter = null;
     }
     if (activePointers.size === 1) {
         const remaining =
-            Array.from(
-                activePointers.values()
-            )[0];
-        singlePointerId =
-            remaining.id;
-        singlePointerMoved =
-            true;
+            Array.from(activePointers.values())[0];
+        singlePointerId = remaining.id;
+        singlePointerMoved = true;
         pinchActive = false;
         singlePointerWorld = {
-            x:
-                (remaining.x -
-                    panX) /
-                zoomFactor,
-            y:
-                (remaining.y -
-                    panY) /
-                zoomFactor
+            x: (remaining.x - panX) / zoomFactor,
+            y: (remaining.y - panY) / zoomFactor
         };
     }
     if (activePointers.size === 0) {
         singlePointerId = null;
-        singlePointerMoved =
-            false;
-        singlePointerWorld =
-            null;
+        singlePointerMoved = false;
+        singlePointerWorld = null;
         pinchActive = false;
     }
     try {
-        workspace.releasePointerCapture(
-            event.pointerId
-        );
+        workspace.releasePointerCapture(event.pointerId);
     } catch (_) {}
 }
-function handlePointerCancel(
-    event
-) {
+function handlePointerCancel(event) {
     event.preventDefault();
-    activePointers.delete(
-        event.pointerId
-    );
+    activePointers.delete(event.pointerId);
     lastPinchDistance = 0;
     lastPinchCenter = null;
     pinchActive = false;
     if (activePointers.size === 0) {
         singlePointerId = null;
-        singlePointerMoved =
-            false;
-        singlePointerWorld =
-            null;
-    } else if (
-        activePointers.size === 1
-    ) {
+        singlePointerMoved = false;
+        singlePointerWorld = null;
+    } else if (activePointers.size === 1) {
         const remaining =
-            Array.from(
-                activePointers.values()
-            )[0];
-        singlePointerId =
-            remaining.id;
-        singlePointerMoved =
-            true;
+            Array.from(activePointers.values())[0];
+        singlePointerId = remaining.id;
+        singlePointerMoved = true;
         singlePointerWorld = {
-            x:
-                (remaining.x -
-                    panX) /
-                zoomFactor,
-            y:
-                (remaining.y -
-                    panY) /
-                zoomFactor
+            x: (remaining.x - panX) / zoomFactor,
+            y: (remaining.y - panY) / zoomFactor
         };
     }
     try {
-        workspace.releasePointerCapture(
-            event.pointerId
-        );
+        workspace.releasePointerCapture(event.pointerId);
     } catch (_) {}
 }
-function handleTrackpadWheel(
-    event
-) {
-    if (!sourceImage) {
-        return;
-    }
+function handleTrackpadWheel(event) {
+    if (!sourceImage) return;
     event.preventDefault();
-    const rect =
-        workspace.getBoundingClientRect();
-    const screenX =
-        event.clientX -
-        rect.left;
-    const screenY =
-        event.clientY -
-        rect.top;
+    const rect = workspace.getBoundingClientRect();
+    const screenX = event.clientX - rect.left;
+    const screenY = event.clientY - rect.top;
     if (event.ctrlKey) {
         const worldX =
-            (screenX - panX) /
-            zoomFactor;
+            (screenX - panX) / zoomFactor;
         const worldY =
-            (screenY - panY) /
-            zoomFactor;
+            (screenY - panY) / zoomFactor;
         const factor =
-            Math.exp(
-                -event.deltaY *
-                0.01
-            );
+            Math.exp(-event.deltaY * 0.01);
         const newZoom =
-            clampZoom(
-                zoomFactor *
-                factor
-            );
-        panX =
-            screenX -
-            worldX * newZoom;
-        panY =
-            screenY -
-            worldY * newZoom;
-        zoomFactor =
-            newZoom;
+            clampZoom(zoomFactor * factor);
+        panX = screenX - worldX * newZoom;
+        panY = screenY - worldY * newZoom;
+        zoomFactor = newZoom;
         applyCamera();
         return;
     }
@@ -1428,44 +1963,16 @@ function handleTrackpadWheel(
     applyCamera();
 }
 function draw() {
-    if (!canvas || !ctx) {
+    if (!canvas || !ctx) return;
+    const worldWidth = cols * tileSize;
+    const worldHeight = rows * tileSize;
+    if (worldWidth <= 0 || worldHeight <= 0) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
         return;
     }
-    const worldWidth =
-        cols * tileSize;
-    const worldHeight =
-        rows * tileSize;
-    if (
-        worldWidth <= 0 ||
-        worldHeight <= 0
-    ) {
-        ctx.setTransform(
-            1,
-            0,
-            0,
-            1,
-            0,
-            0
-        );
-        ctx.clearRect(
-            0,
-            0,
-            canvas.width,
-            canvas.height
-        );
-        return;
-    }
-    const dpr =
-        window.devicePixelRatio ||
-        1;
-    ctx.setTransform(
-        dpr,
-        0,
-        0,
-        dpr,
-        0,
-        0
-    );
+    const dpr = window.devicePixelRatio || 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(
         0,
         0,
@@ -1483,26 +1990,12 @@ function draw() {
     }
     if (selectedTiles.size > 0) {
         if (colorImage) {
-            for (
-                const index of selectedTiles
-            ) {
-                if (
-                    index < 0 ||
-                    index >=
-                        cols * rows
-                ) {
-                    continue;
-                }
-                const row =
-                    Math.floor(
-                        index / cols
-                    );
-                const col =
-                    index % cols;
-                const x =
-                    col * tileSize;
-                const y =
-                    row * tileSize;
+            for (const index of selectedTiles) {
+                if (index < 0 || index >= cols * rows) continue;
+                const row = Math.floor(index / cols);
+                const col = index % cols;
+                const x = col * tileSize;
+                const y = row * tileSize;
                 ctx.drawImage(
                     colorImage,
                     x,
@@ -1516,24 +2009,11 @@ function draw() {
                 );
             }
         } else {
-            ctx.fillStyle =
-                "rgba(255, 0, 0, 0.35)";
-            for (
-                const index of selectedTiles
-            ) {
-                if (
-                    index < 0 ||
-                    index >=
-                        cols * rows
-                ) {
-                    continue;
-                }
-                const row =
-                    Math.floor(
-                        index / cols
-                    );
-                const col =
-                    index % cols;
+            ctx.fillStyle = "rgba(255, 0, 0, 0.35)";
+            for (const index of selectedTiles) {
+                if (index < 0 || index >= cols * rows) continue;
+                const row = Math.floor(index / cols);
+                const col = index % cols;
                 ctx.fillRect(
                     col * tileSize,
                     row * tileSize,
@@ -1544,58 +2024,22 @@ function draw() {
         }
     }
     ctx.beginPath();
-    ctx.lineWidth =
-        1 /
-        Math.max(
-            zoomFactor,
-            0.0001
-        );
-    ctx.strokeStyle =
-        "rgba(0, 0, 0, 0.35)";
-    for (
-        let col = 0;
-        col <= cols;
-        col++
-    ) {
-        const x =
-            col * tileSize +
-            0.5;
-        ctx.moveTo(
-            x,
-            0
-        );
-        ctx.lineTo(
-            x,
-            worldHeight
-        );
+    ctx.lineWidth = 1 / Math.max(zoomFactor, 0.0001);
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.35)";
+    for (let col = 0; col <= cols; col++) {
+        const x = col * tileSize + 0.5;
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, worldHeight);
     }
-    for (
-        let row = 0;
-        row <= rows;
-        row++
-    ) {
-        const y =
-            row * tileSize +
-            0.5;
-        ctx.moveTo(
-            0,
-            y
-        );
-        ctx.lineTo(
-            worldWidth,
-            y
-        );
+    for (let row = 0; row <= rows; row++) {
+        const y = row * tileSize + 0.5;
+        ctx.moveTo(0, y);
+        ctx.lineTo(worldWidth, y);
     }
     ctx.stroke();
     ctx.beginPath();
-    ctx.lineWidth =
-        1 /
-        Math.max(
-            zoomFactor,
-            0.0001
-        );
-    ctx.strokeStyle =
-        "rgba(0, 0, 0, 0.8)";
+    ctx.lineWidth = 1 / Math.max(zoomFactor, 0.0001);
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.8)";
     ctx.rect(
         0.5,
         0.5,
@@ -1607,7 +2051,5 @@ function draw() {
 function clearSelection() {
     selectedTiles.clear();
     draw();
-    console.log(
-        "Sélection effacée."
-    );
+    console.log("Sélection effacée.");
 }
