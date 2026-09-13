@@ -1,0 +1,12 @@
+<!-- ===== PWA / installation écran d'accueil iPad ===== -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#1c1c1e">
+
+<!-- Spécifique iOS/iPadOS (Safari ne lit pas toujours le manifest.json) -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pixeliser">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+
+<!-- Empêche le zoom pincé sur l'UI (le zoom de la grille reste géré par ton code) -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
