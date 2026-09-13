@@ -62,6 +62,20 @@ document.addEventListener("DOMContentLoaded",async function(){
     const clearButton=document.getElementById("clearButton");
     const grilleInput=document.getElementById("grilleInput");
     const saveGrilleButton=document.getElementById("saveGrilleButton");
+    const paletteButton=document.getElementById("paletteButton");
+    const palettePanel=document.getElementById("palettePanel");
+    const paletteCloseButton=document.getElementById("paletteCloseButton");
+    const paletteImageElement=document.getElementById("paletteImageElement");
+    if(paletteButton){
+    paletteButton.addEventListener("click",function(){
+        showPalettePanel();
+    });
+}
+if(paletteCloseButton){
+    paletteCloseButton.addEventListener("click",function(){
+        hidePalettePanel();
+    });
+}
     if(saveGrilleButton){
         saveGrilleButton.addEventListener("click",saveGrilleFile);
     }
@@ -1266,6 +1280,38 @@ function handleWheel(event){
     panX-=event.deltaX;
     panY-=event.deltaY;
     draw();
+}
+// ============================================================
+// PALETTE
+// ============================================================
+function showPalettePanel(){
+    if(!paletteImagePNGBytes){
+        alert("Aucune palette disponible.");
+        return;
+    }
+    const panel=document.getElementById("palettePanel");
+    const imageElement=document.getElementById("paletteImageElement");
+    if(!panel||!imageElement){
+        return;
+    }
+    const blob=new Blob(
+        [paletteImagePNGBytes],
+        {type:"image/png"}
+    );
+    const url=URL.createObjectURL(blob);
+    if(imageElement._paletteURL){
+        URL.revokeObjectURL(imageElement._paletteURL);
+    }
+    imageElement._paletteURL=url;
+    imageElement.src=url;
+    panel.style.display="block";
+}
+function hidePalettePanel(){
+    const panel=document.getElementById("palettePanel");
+    if(!panel){
+        return;
+    }
+    panel.style.display="none";
 }
 // ============================================================
 // EFFACER
