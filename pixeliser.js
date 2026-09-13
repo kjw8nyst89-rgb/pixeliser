@@ -1,6 +1,6 @@
 import createLZFSEModule from "./lzfse/lzfse.js";
 
-const version = "V7";
+const version = "V7-1";
 
 // ============================================================
 // VARIABLES GLOBALES
@@ -9,6 +9,7 @@ const version = "V7";
 let sourceImagePNGBytes = null;
 let colorImagePNGBytes = null;
 let paletteImagePNGBytes = null;
+let shareInProgress = false;
 
 let currentGrilleFileName = "grille.grille";
 
@@ -4173,19 +4174,31 @@ async function saveGrilleFile() {
                 files: [file]
             })
         ) {
+        if (shareInProgress) {
+            console.log("Partage déjà en cours, sauvegarde ignorée.");
+            return;
+        }
 
-            console.log(
-                "Ouverture de la feuille de partage iPad..."
-            );
+        shareInProgress = true;
+         try {
+            console.log("Ouverture de la feuille de partage iPad...");
 
             await navigator.share({
-                files: [file],
-                title: filename
+            files: [file]
             });
 
-            console.log(
-                "Sauvegarde/partage terminé."
-            );
+            console.log("Partage terminé.");
+        }
+        catch (error) {
+            if (error.name === "AbortError") {
+                console.log("Partage annulé par l'utilisateur.");
+            } else {
+                console.error("Erreur partage :", error);
+            }
+        }
+        finally {
+            shareInProgress = false;
+        }
 
             return;
         }
