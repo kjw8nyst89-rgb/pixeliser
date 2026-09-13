@@ -1,5 +1,5 @@
 import createLZFSEModule from "./lzfse/lzfse.js";
-const version="V7-3";
+const version="V7-4";
 // ============================================================
 // VARIABLES GLOBALES
 // ============================================================
@@ -1210,8 +1210,11 @@ class BinaryPlistEncoder{
         this.collecting=new Set();
     }
     encode(){
+        this.objects=[];
+        this.objectMap=new Map();
         this.collectAllObjects(this.root);
         const objectCount=this.objects.length;
+        console.log("BinaryPlistEncoder : nombre d'objets :",objectCount);
         let objectRefSize;
         if(objectCount<=0xFF){
             objectRefSize=1;
@@ -1303,7 +1306,7 @@ class BinaryPlistEncoder{
                 return;
             }
             visited.add(object);
-            const index=this.addObject(object);
+            this.addObject(object);
             if(Array.isArray(object)){
                 for(const item of object){
                     visit(item);
@@ -1318,6 +1321,9 @@ class BinaryPlistEncoder{
         visit(value);
     }
     addObject(value){
+        if(value instanceof PlistUID){
+            return value.value;
+        }
         const key=this.objectKey(value);
         if(key!==null&&this.objectMap.has(key)){
             return this.objectMap.get(key);
