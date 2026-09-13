@@ -32,6 +32,9 @@ let singlePointer=null;
 let singlePointerMoved=false;
 let lastPointerWorldX=0;
 let lastPointerWorldY=0;
+let dernierTapTemps = 0;
+const DELAI_DOUBLE_TAP = 300; // Temps max entre deux taps (en ms)
+let premierPointGrille = null; 
 // ============================================================
 // PINCH
 // ============================================================
@@ -970,6 +973,41 @@ function toggleTileAt(x,y){
     draw();
 }
 // ============================================================
+// REMPLISSAGE DE LIGNE (HORIZONTAL OU VERTICAL)
+// ============================================================
+function remplirLigneEntreDeuxPoints(p1, p2) {
+    const deltaX = Math.abs(p2.col - p1.col);
+    const deltaY = Math.abs(p2.row - p1.row);
+    
+    // Détermination de l'axe dominant
+    if (deltaX >= deltaY) {
+        // LIGNE HORIZONTALE
+        console.log("Axe dominant : Horizontal");
+        const startCol = Math.min(p1.col, p2.col);
+        const endCol = Math.max(p1.col, p2.col);
+        const ligneRow = p1.row; // On utilise la rangée du premier point
+        
+        for (let c = startCol; c <= endCol; c++) {
+            const index = ligneRow * cols + c;
+            selectedTiles.add(index);
+        }
+    } else {
+        // LIGNE VERTICALE
+        console.log("Axe dominant : Vertical");
+        const startRow = Math.min(p1.row, p2.row);
+        const endRow = Math.max(p1.row, p2.row);
+        const ligneCol = p1.col; // On utilise la colonne du premier point
+        
+        for (let r = startRow; r <= endRow; r++) {
+            const index = r * cols + ligneCol;
+            selectedTiles.add(index);
+        }
+    }
+    
+    // On redessine le canvas avec la nouvelle ligne
+    draw();
+}
+// ============================================================
 // SELECTION PAR GLISSEMENT
 // ============================================================
 function selectTileAt(x,y){
@@ -1142,21 +1180,67 @@ function handleTouchMove(event){
 // ============================================================
 // TOUCH END
 // ============================================================
+// ============================================================
+// TOUCH END (VERSION DOUBLE TAP & LIGNE AUTOMATIQUE)
+// ============================================================
 function handleTouchEnd(event){
-    console.log("### TOUCHEND",event.touches.length);
+    console.log("### TOUCHEND", event.touches.length);
     event.preventDefault();
-    if(event.touches.length===1){
-        singlePointerMoved=true;
-        lastPinchDistance=0;
+    
+    if (event.touches.length === 1) {
+        singlePointerMoved = true;
+        lastPinchDistance = 0;
         return;
     }
-    if(event.touches.length===0){
-        if(!singlePointerMoved){
-            toggleTileAt(lastPointerWorldX,lastPointerWorldY);
+    
+    if (event.touches.length === 0) {
+        // Si le doigt n'a pas bougé, c'est un TAP propre
+        if (!singlePointerMoved) {
+            const maintenant = new Date().getTime();
+            const ecartTemps = maintenant - dernierTapTemps;
+            
+            // Récupération de la case sur laquelle l'utilisateur a appuyé
+            const col = Math.floor(lastPointerWorldX / tileSize);
+            const row = Math.floor(lastPointerWorldY / tileSize);
+            
+            // Vérification si la case est bien dans les limites du canvas
+            if (col >= 0 && col < cols && row >= 0 && row < rows) {
+                
+                // --- LOGIQUE DU DOUBLE TAP ---
+                if (ecartTemps < DELAI_DOUBLE_TAP && ecartTemps > 0) {
+                    console.log("Double tap détecté sur la case :", col, row);
+                    
+                    if (premierPointGrille === null) {
+                        // Premier double tap : On mémorise la case de départ
+                        premierPointGrille = { col: col, row: row };
+                        console.log("Premier point enregistré. En attente du second...");
+                        
+                        // Optionnel : On peut colorer temporairement ou flasher la case de départ
+                        selectedTiles.add(row * cols + col);
+                        draw();
+                    } else {
+                        // Second double tap : On trace la ligne !
+                        console.log("Second point enregistré. Tracé de la ligne...");
+                        remplirLigneEntreDeuxPoints(premierPointGrille, { col: col, row: row });
+                        
+                        // Réinitialisation pour la prochaine ligne
+                        premierPointGrille = null; 
+                    }
+                } else {
+                    // --- TAP SIMPLE NORMAL ---
+                    // Si un premier point était en attente mais que l'utilisateur fait un tap simple ailleurs,
+                    // on peut choisir de conserver le comportement d'origine du tap simple.
+                    toggleTileAt(lastPointerWorldX, lastPointerWorldY);
+                }
+            }
+            
+            // Mise à jour du timestamp du dernier tap
+            dernierTapTemps = maintenant;
         }
-        lastPinchDistance=0;
-        singlePointerMoved=false;
-        touchInteractionActive=false;
+        
+        lastPinchDistance = 0;
+        singlePointerMoved = false;
+        touchInteractionActive = false;
     }
 }
 // ============================================================
