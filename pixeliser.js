@@ -1,5 +1,5 @@
 import createLZFSEModule from "./lzfse/lzfse.js";
-const version="V7-6";
+const version="V7-7";
 // ============================================================
 // VARIABLES GLOBALES
 // ============================================================
