@@ -1,5 +1,5 @@
 import createLZFSEModule from "./lzfse/lzfse.js";
-const version="V7-4";
+const version="V7-5";
 // ============================================================
 // VARIABLES GLOBALES
 // ============================================================
@@ -1287,7 +1287,12 @@ class BinaryPlistEncoder{
     collectAllObjects(value){
         const visited=new Set();
         const visit=(object)=>{
+            // FIX : les PlistUID doivent obtenir un vrai slot dans la table
+            // à plat, sinon aucun objet binaire de type UID (0x8) n'est
+            // jamais écrit, et les références $top/root, $class, etc.
+            // ne pointent vers rien de valide au rechargement.
             if(object instanceof PlistUID){
+                this.addObject(object);
                 return;
             }
             if(object instanceof Uint8Array){
@@ -1321,9 +1326,9 @@ class BinaryPlistEncoder{
         visit(value);
     }
     addObject(value){
-        if(value instanceof PlistUID){
-            return value.value;
-        }
+        // FIX : on ne court-circuite plus les PlistUID. Ils sont ajoutés
+        // à la table à plat comme n'importe quel autre objet, avec
+        // dédoublonnage via objectKey() (voir plus bas).
         const key=this.objectKey(value);
         if(key!==null&&this.objectMap.has(key)){
             return this.objectMap.get(key);
@@ -1336,8 +1341,10 @@ class BinaryPlistEncoder{
         return index;
     }
     objectKey(value){
+        // FIX : les PlistUID sont dédoublonnés par la valeur d'UID qu'ils
+        // référencent, pour que deux PlistUID(5) obtiennent le même slot.
         if(value instanceof PlistUID){
-            return null;
+            return "uid:"+value.value;
         }
         if(value instanceof Uint8Array){
             return null;
@@ -1672,7 +1679,19 @@ function buildNSKeyedArchive(grilleBytes,couleurBytes,paletteBytes,selectedIndex
         "$objects":objects
     };
     const encoder=new BinaryPlistEncoder(plist);
-    return encoder.encode();
+    const archive=encoder.encode();
+    if(typeof window!=="undefined"&&window.PIXELISER_SELF_TEST){
+        try{
+            const testRoot=decodeGrilleArchive(archive);
+            const testData=extractGrilleData(testRoot);
+            console.log("AUTO-TEST round-trip NSKeyedArchiver : OK",testData);
+        }
+        catch(error){
+            console.error("AUTO-TEST round-trip NSKeyedArchiver : ÉCHEC",error);
+            throw new Error("Auto-test d'écriture de l'archive échoué : "+error.message);
+        }
+    }
+    return archive;
 }
 // ============================================================
 // Construction du fichier .grille
