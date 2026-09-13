@@ -1,44 +1,44 @@
 import createLZFSEModule from "./lzfse/lzfse.js";
-const version = "V7-2";
+const version="V7-3";
 // ============================================================
 // VARIABLES GLOBALES
 // ============================================================
-let sourceImagePNGBytes = null;
-let colorImagePNGBytes = null;
-let paletteImagePNGBytes = null;
-let shareInProgress = false;
-let currentGrilleFileName = "grille.grille";
-let lzfseModule = null;
-let sourceImage = null;
-let colorImage = null;
-let paletteImage = null;
-let canvas = null;
-let ctx = null;
-let cols = 0;
-let rows = 0;
-let tileSize = 20;
-let selectedTiles = new Set();
+let sourceImagePNGBytes=null;
+let colorImagePNGBytes=null;
+let paletteImagePNGBytes=null;
+let shareInProgress=false;
+let currentGrilleFileName="grille.grille";
+let lzfseModule=null;
+let sourceImage=null;
+let colorImage=null;
+let paletteImage=null;
+let canvas=null;
+let ctx=null;
+let cols=0;
+let rows=0;
+let tileSize=20;
+let selectedTiles=new Set();
 // ============================================================
 // CAMERA
 // ============================================================
-let zoomFactor = 1.0;
-let panX = 0;
-let panY = 0;
+let zoomFactor=1.0;
+let panX=0;
+let panY=0;
 // ============================================================
 // POINTER / TOUCH
 // ============================================================
-let activePointers = new Map();
-let singlePointer = null;
-let singlePointerMoved = false;
-let lastPointerWorldX = 0;
-let lastPointerWorldY = 0;
+let activePointers=new Map();
+let singlePointer=null;
+let singlePointerMoved=false;
+let lastPointerWorldX=0;
+let lastPointerWorldY=0;
 // ============================================================
 // PINCH
 // ============================================================
-let lastPinchDistance = 0;
-let lastPinchCenterX = 0;
-let lastPinchCenterY = 0;
-let touchInteractionActive = false;
+let lastPinchDistance=0;
+let lastPinchCenterX=0;
+let lastPinchCenterY=0;
+let touchInteractionActive=false;
 // ============================================================
 // INITIALISATION
 // ============================================================
@@ -55,9 +55,6 @@ document.addEventListener("DOMContentLoaded",async function(){
         console.error("Impossible de créer le contexte 2D.");
         return;
     }
-    // ----------------------------------------------------
-    // Boutons
-    // ----------------------------------------------------
     const openGrilleButton=document.getElementById("openGrilleButton");
     const clearButton=document.getElementById("clearButton");
     const grilleInput=document.getElementById("grilleInput");
@@ -88,34 +85,19 @@ document.addEventListener("DOMContentLoaded",async function(){
     if(clearButton){
         clearButton.addEventListener("click",clearSelection);
     }
-    // ----------------------------------------------------
-    // Pointer Events
-    // ----------------------------------------------------
     canvas.addEventListener("pointerdown",handlePointerDown,{passive:false});
     canvas.addEventListener("pointermove",handlePointerMove,{passive:false});
     canvas.addEventListener("pointerup",handlePointerUp,{passive:false});
     canvas.addEventListener("pointercancel",handlePointerUp,{passive:false});
-    // ----------------------------------------------------
-    // Touch Events
-    // ----------------------------------------------------
     canvas.addEventListener("touchstart",handleTouchStart,{passive:false});
     canvas.addEventListener("touchmove",handleTouchMove,{passive:false});
     canvas.addEventListener("touchend",handleTouchEnd,{passive:false});
     canvas.addEventListener("touchcancel",handleTouchEnd,{passive:false});
-    // ----------------------------------------------------
-    // Trackpad / molette
-    // ----------------------------------------------------
     canvas.addEventListener("wheel",handleWheel,{passive:false});
-    // ----------------------------------------------------
-    // Resize
-    // ----------------------------------------------------
     window.addEventListener("resize",function(){
         resizeCanvasToWorkspace();
         draw();
     });
-    // ----------------------------------------------------
-    // LZFSE
-    // ----------------------------------------------------
     try{
         await initializeLZFSE();
     }
@@ -1217,17 +1199,18 @@ class PlistUID{
         this.value=value;
     }
 }
-// ------------------------------------------------------------
+// ============================================================
 // Encodeur Binary Plist
-// ------------------------------------------------------------
+// ============================================================
 class BinaryPlistEncoder{
     constructor(root){
         this.root=root;
         this.objects=[];
         this.objectMap=new Map();
+        this.collecting=new Set();
     }
     encode(){
-        this.addObject(this.root);
+        this.collectAllObjects(this.root);
         const objectCount=this.objects.length;
         let objectRefSize;
         if(objectCount<=0xFF){
@@ -1297,6 +1280,42 @@ class BinaryPlistEncoder{
             result.push(b);
         }
         return new Uint8Array(result);
+    }
+    collectAllObjects(value){
+        const visited=new Set();
+        const visit=(object)=>{
+            if(object instanceof PlistUID){
+                return;
+            }
+            if(object instanceof Uint8Array){
+                this.addObject(object);
+                return;
+            }
+            if(object instanceof ArrayBuffer){
+                this.addObject(object);
+                return;
+            }
+            if(object===null||typeof object!=="object"){
+                this.addObject(object);
+                return;
+            }
+            if(visited.has(object)){
+                return;
+            }
+            visited.add(object);
+            const index=this.addObject(object);
+            if(Array.isArray(object)){
+                for(const item of object){
+                    visit(item);
+                }
+                return;
+            }
+            for(const key of Object.keys(object)){
+                visit(key);
+                visit(object[key]);
+            }
+        };
+        visit(value);
     }
     addObject(value){
         const key=this.objectKey(value);
@@ -1689,28 +1708,12 @@ async function saveGrilleFile(){
         if(!paletteImagePNGBytes){
             throw new Error("Les données PNG de PALETTE ne sont pas disponibles.");
         }
-        // ----------------------------------------------------
-        // ENCOURS
-        //
-        // IMPORTANT :
-        // la sélection réellement utilisée par cette version
-        // est selectedTiles.
-        // Il ne faut pas utiliser _gridView.selectedIndexes.
-        // ----------------------------------------------------
         const selectedIndexes=new Set(selectedTiles);
         console.log("Cases à sauvegarder :",selectedIndexes.size);
-        // ----------------------------------------------------
-        // TILESIZE
-        //
-        // L'affichage iPad utilise 2x la valeur stockée.
-        // ----------------------------------------------------
         const displayTileSize=Number.isFinite(tileSize)?tileSize:20;
         const storedTileSize=Math.max(1,Math.round(displayTileSize/2));
         console.log("TileSize affiché :",displayTileSize);
         console.log("TileSize stocké :",storedTileSize);
-        // ----------------------------------------------------
-        // Construction du fichier
-        // ----------------------------------------------------
         const grilleFile=buildGrilleFile(
             new Uint8Array(sourceImagePNGBytes),
             new Uint8Array(colorImagePNGBytes),
@@ -1718,9 +1721,6 @@ async function saveGrilleFile(){
             selectedIndexes,
             storedTileSize
         );
-        // ----------------------------------------------------
-        // Nom du fichier
-        // ----------------------------------------------------
         let filename=currentGrilleFileName||"grille.grille";
         if(!filename.toLowerCase().endsWith(".grille")){
             filename+=".grille";
@@ -1734,9 +1734,6 @@ async function saveGrilleFile(){
                 type:"application/octet-stream"
             }
         );
-        // ----------------------------------------------------
-        // iPad / iOS
-        // ----------------------------------------------------
         if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
             shareInProgress=true;
             try{
@@ -1760,9 +1757,6 @@ async function saveGrilleFile(){
             }
             return;
         }
-        // ----------------------------------------------------
-        // Safari / Mac
-        // ----------------------------------------------------
         const url=URL.createObjectURL(file);
         const a=document.createElement("a");
         a.href=url;
