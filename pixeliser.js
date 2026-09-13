@@ -1,5 +1,5 @@
 import createLZFSEModule from "./lzfse/lzfse.js";
-const version="V7-5";
+const version="V7-6";
 // ============================================================
 // VARIABLES GLOBALES
 // ============================================================
@@ -1207,11 +1207,18 @@ class BinaryPlistEncoder{
         this.root=root;
         this.objects=[];
         this.objectMap=new Map();
+        // FIX : table de déduplication séparée pour les types référence
+        // (Uint8Array, ArrayBuffer, Array, objet). objectMap (basée sur des
+        // clés string) ne peut pas les dédupliquer ; refMap utilise
+        // l'identité de l'objet (une Map compare ses clés par référence),
+        // exactement comme le Set "visited" de collectAllObjects.
+        this.refMap=new Map();
         this.collecting=new Set();
     }
     encode(){
         this.objects=[];
         this.objectMap=new Map();
+        this.refMap=new Map();
         this.collectAllObjects(this.root);
         const objectCount=this.objects.length;
         console.log("BinaryPlistEncoder : nombre d'objets :",objectCount);
@@ -1326,9 +1333,34 @@ class BinaryPlistEncoder{
         visit(value);
     }
     addObject(value){
-        // FIX : on ne court-circuite plus les PlistUID. Ils sont ajoutés
-        // à la table à plat comme n'importe quel autre objet, avec
-        // dédoublonnage via objectKey() (voir plus bas).
+        // FIX : les types référence (Uint8Array, ArrayBuffer, Array, objet
+        // simple) doivent être dédupliqués par IDENTITÉ, pas par valeur.
+        // Sans ça, quand encodeArray/encodeDictionary rappellent addObject
+        // pendant la phase d'écriture (pour retrouver l'index d'un enfant
+        // déjà collecté), objectKey() renvoyait null pour ces types donc
+        // AUCUNE déduplication n'avait lieu : un nouveau slot était créé
+        // après que la taille de la table (objectCount) avait déjà été
+        // figée, produisant des références qui pointent hors de la table
+        // déclarée dans le footer ("Référence objet invalide").
+        if(value instanceof PlistUID){
+            const key="uid:"+value.value;
+            if(this.objectMap.has(key)){
+                return this.objectMap.get(key);
+            }
+            const index=this.objects.length;
+            this.objects.push(value);
+            this.objectMap.set(key,index);
+            return index;
+        }
+        if(value!==null&&typeof value==="object"){
+            if(this.refMap.has(value)){
+                return this.refMap.get(value);
+            }
+            const index=this.objects.length;
+            this.objects.push(value);
+            this.refMap.set(value,index);
+            return index;
+        }
         const key=this.objectKey(value);
         if(key!==null&&this.objectMap.has(key)){
             return this.objectMap.get(key);
